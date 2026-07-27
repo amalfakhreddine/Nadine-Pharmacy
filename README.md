@@ -4,7 +4,7 @@
 - `admin.html`: private admin dashboard
 
 ## Admin login
-Username: `admin`
+Username: `nadinepharmacy@gmail.com`
 Password: `nadine123`
 
 The admin password can be changed from Settings. Products, categories, orders, images and expiry dates are stored in the browser for this demo.
