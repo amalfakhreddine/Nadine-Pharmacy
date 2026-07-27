@@ -1,14 +1,20 @@
-# Nadine Pharmacy admin upgrade
+# Nadine Pharmacy complete upgrade
 
-This version stores products, categories and orders in Firebase Cloud Firestore.
+This version uses Firebase Authentication and Cloud Firestore for customers, products, categories, stock and orders.
 
-## One required Firebase step
-Open Firebase Console → Firestore Database → Rules. Replace the existing rules with the contents of `firestore.rules`, then click Publish.
+## Included upgrades
+- Google and email sign-in only; Apple removed
+- Customer and admin password reset
+- Customer account menu and sign-out
+- Transactional order placement using current Firestore prices and stock
+- Automatic inventory decrease and cancellation restock
+- Updated Firestore rules
+- Privacy, terms, delivery/returns and prescription policies
+- WhatsApp contact button
+- Updated documentation
+
+## Required Firebase step
+Publish the included `firestore.rules` in Firebase Console → Firestore Database → Rules.
 
 ## Deploy
-Commit all files to the connected GitHub repository. Vercel will deploy automatically.
-
-## Pharmacy workflow
-The pharmacy only opens `/admin.html`. It can add, edit and delete products, change prices and stock, manage categories, process orders, review order history and change the admin password. Changes to products and categories appear live on the customer website on every device.
-
-Images are compressed in the browser and limited to three per product to stay within Firestore document limits.
+Commit every file to the connected GitHub repository. Vercel will redeploy automatically.
