@@ -2,18 +2,28 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    function authEmail() {
+      return signedIn() && request.auth.token.email is string
+        ? request.auth.token.email.lower()
+        : "";
+    }
     function fallbackAdmin() {
       return signedIn()
-        && request.auth.token.email == "nadinepharmacy@gmail.com"
+        && authEmail() == "nadinepharmacy@gmail.com"
         && !exists(/databases/$(database)/documents/settings/adminAccess);
     }
     function configuredAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/settings/adminAccess)
         && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails is list
-        && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails.hasAny([request.auth.token.email]);
+        && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails.hasAny([authEmail()]);
     }
     function isAdmin() { return fallbackAdmin() || configuredAdmin(); }
+    function validAdminAccess() {
+      return request.resource.data.adminEmails is list
+        && request.resource.data.adminEmails.size() > 0
+        && request.resource.data.adminEmails.size() <= 25;
+    }
 
     match /orders/{orderId} {
       allow create: if signedIn()
@@ -52,7 +62,15 @@ service cloud.firestore {
     }
 
     match /settings/adminAccess {
-      allow read, create, update, delete: if isAdmin();
+      allow read: if isAdmin();
+      allow create: if fallbackAdmin() && validAdminAccess();
+      allow update: if isAdmin() && validAdminAccess();
+      allow delete: if false;
+    }
+
+    match /settings/adminProfile {
+      allow read, create, update: if isAdmin();
+      allow delete: if false;
     }
 
     match /settings/{documentId} {

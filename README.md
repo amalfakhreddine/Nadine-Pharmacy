@@ -18,7 +18,7 @@
 - Phone, map and WhatsApp contact links
 
 ## Admin access
-Create the pharmacy admin in Firebase Authentication using the exact email in `firebase-config.js` (`NADINE_ADMIN_EMAIL`). Do not store or publish the password in this repository.
+Create the first pharmacy admin in Firebase Authentication using the exact email in `firebase-config.js` (`NADINE_ADMIN_EMAIL`). After first login, an authorised admin can add more admin emails under **Settings → Admin access emails**. Create each account in Firebase Authentication first. Do not store or publish passwords in this repository.
 
 ## Important
 Publish the supplied `firestore.rules` after every rules change. The website is designed for order requests and cash/pickup workflows. For online card payments or stronger anti-tampering guarantees, add a trusted server or Firebase Cloud Function to calculate and create orders.
@@ -40,15 +40,15 @@ This build adds:
 
 After uploading the files, sign in to the admin panel, open **Settings**, set the delivery charge, and save.
 
-## Changing the admin email
-1. In Firebase Console, open **Authentication → Users** and create the new admin account first.
-2. Sign in to the current admin dashboard.
-3. Open **Settings → Admin access email**.
-4. Enter the new email and save. You will be signed out automatically.
-5. Sign in using the new Firebase Authentication account.
+## Managing authorised admins
+1. In Firebase Console, open **Authentication → Users** and create each admin account first.
+2. Sign in to the admin dashboard with an already authorised account.
+3. Open **Settings → Admin access emails**.
+4. Enter one authorised email per line and save.
+5. Any email in this list can sign in, manage the website, and edit the shared Admin Profile.
 
-Publish the included `firestore.rules` before using this feature. The first login with the original admin email creates the secure `settings/adminAccess` document automatically.
+Keep at least one authorised email. Removing your current email signs you out. Publish the included `firestore.rules` before using this feature. The first login with the original admin email creates the secure `settings/adminAccess` document automatically.
 
 
 ## Customer and admin profiles
-This version adds Firestore-backed customer profiles (contact details, default Tripoli delivery address, preferences, account statistics and password reset) and an admin profile (identity, contact details, role and security summary). Publish the included Firestore rules.
+This version adds Firestore-backed customer profiles and one shared admin profile stored at `settings/adminProfile`. Every authorised admin can read and edit the shared pharmacy identity, phone number and job title. Publish the included Firestore rules.

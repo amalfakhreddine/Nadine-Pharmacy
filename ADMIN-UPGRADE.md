@@ -8,6 +8,8 @@ This version uses Firebase Authentication and Cloud Firestore for customers, pro
 - Customer account menu and sign-out
 - Transactional order placement using current Firestore prices and stock
 - Automatic inventory decrease and cancellation restock
+- Multiple authorised admin emails
+- Shared admin profile editable by every authorised admin
 - Updated Firestore rules
 - Privacy, terms, delivery/returns and prescription policies
 - WhatsApp contact button
