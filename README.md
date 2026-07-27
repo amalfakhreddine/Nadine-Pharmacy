@@ -13,4 +13,3 @@ Customer footer information:
 - Rue Maarad, Tripoli, Lebanon
 - 06 440 470
 - Homeopathic pharmacy
-Testing GitHub deployment
