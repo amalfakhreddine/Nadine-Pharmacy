@@ -2,7 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function isAdmin() { return signedIn() && request.auth.token.email == "nadinepharmacy@gmail.com"; }
+    function fallbackAdmin() {
+      return signedIn()
+        && request.auth.token.email == "nadinepharmacy@gmail.com"
+        && !exists(/databases/$(database)/documents/settings/adminAccess);
+    }
+    function configuredAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/settings/adminAccess)
+        && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails is list
+        && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails.hasAny([request.auth.token.email]);
+    }
+    function isAdmin() { return fallbackAdmin() || configuredAdmin(); }
 
     match /orders/{orderId} {
       allow create: if signedIn()
@@ -30,13 +41,16 @@ service cloud.firestore {
       );
     }
 
-
     match /wishlists/{userId} {
       allow read, create, update, delete: if signedIn() && request.auth.uid == userId;
     }
 
+    match /settings/adminAccess {
+      allow read, create, update, delete: if isAdmin();
+    }
+
     match /settings/{documentId} {
-      allow read: if true;
+      allow read: if documentId != 'adminAccess';
       allow create, update, delete: if isAdmin();
     }
   }

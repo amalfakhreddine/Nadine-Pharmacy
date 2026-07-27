@@ -39,3 +39,12 @@ This build adds:
 - Admin button to permanently delete test orders.
 
 After uploading the files, sign in to the admin panel, open **Settings**, set the delivery charge, and save.
+
+## Changing the admin email
+1. In Firebase Console, open **Authentication → Users** and create the new admin account first.
+2. Sign in to the current admin dashboard.
+3. Open **Settings → Admin access email**.
+4. Enter the new email and save. You will be signed out automatically.
+5. Sign in using the new Firebase Authentication account.
+
+Publish the included `firestore.rules` before using this feature. The first login with the original admin email creates the secure `settings/adminAccess` document automatically.
