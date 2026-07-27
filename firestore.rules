@@ -12,7 +12,8 @@ service cloud.firestore {
         && request.resource.data.total is number
         && request.resource.data.total >= 0
         && request.resource.data.items is list
-        && request.resource.data.items.size() > 0;
+        && request.resource.data.items.size() > 0
+        && (!request.resource.data.requiresPrescription || (request.resource.data.prescriptionImage is string && request.resource.data.prescriptionImage.size() > 100));
       allow read: if isAdmin() || (signedIn() && resource.data.customerUid == request.auth.uid);
       allow update, delete: if isAdmin();
     }

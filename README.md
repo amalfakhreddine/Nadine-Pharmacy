@@ -22,3 +22,7 @@ Create the pharmacy admin in Firebase Authentication using the exact email in `f
 
 ## Important
 Publish the supplied `firestore.rules` after every rules change. The website is designed for order requests and cash/pickup workflows. For online card payments or stronger anti-tampering guarantees, add a trusted server or Firebase Cloud Function to calculate and create orders.
+
+
+## Prescription ordering
+Products can be marked as prescription-required in the admin product form. Customers must upload a clear prescription image at checkout when any such product is in the cart. The image is compressed and stored with the Firestore order so the admin can view and verify it. Deploy the included Firestore rules after uploading these files.
