@@ -26,3 +26,16 @@ Publish the supplied `firestore.rules` after every rules change. The website is 
 
 ## Prescription ordering
 Products can be marked as prescription-required in the admin product form. Customers must upload a clear prescription image at checkout when any such product is in the cart. The image is compressed and stored with the Firestore order so the admin can view and verify it. Deploy the included Firestore rules after uploading these files.
+
+## Premium checkout update
+This build adds:
+- Free pharmacy pickup or Tripoli-only home delivery.
+- Admin-controlled delivery charge and free-delivery threshold.
+- Full delivery-driver details on every delivery order.
+- Separate pickup statuses: New pickup, Preparing, Ready for pickup, Collected.
+- Customer wishlist and recently viewed products.
+- Smarter search fields and optional product badges.
+- Prescription-required products and prescription image verification.
+- Admin button to permanently delete test orders.
+
+After uploading the files, sign in to the admin panel, open **Settings**, set the delivery charge, and save.
