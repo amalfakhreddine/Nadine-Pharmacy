@@ -91,6 +91,16 @@ function startCatalogListeners(){
   },err=>console.error('Categories could not load',err));
 }
 
+document.addEventListener('keydown',function(event){
+  if(event.key==='Enter' && document.getElementById('authModal').classList.contains('show')){
+    const active=document.activeElement;
+    if(active && (active.id==='authEmail' || active.id==='authPassword' || active.id==='authName')){
+      event.preventDefault();
+      document.getElementById('authForm').requestSubmit();
+    }
+  }
+});
+
 if(firebaseReady){auth.onAuthStateChanged(updateAuthButton);startCatalogListeners();}
 renderCats();renderProducts();updateCartCount();updateAuthButton();
 </script></body></html>
