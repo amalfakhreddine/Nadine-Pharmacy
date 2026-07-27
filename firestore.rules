@@ -52,12 +52,14 @@ service cloud.firestore {
     }
 
     match /profiles/{userId} {
-      // Every signed-in customer owns their profile document at profiles/{uid}.
-      // This permits create and partial merge updates from the customer website.
+      // Each customer owns exactly one cloud profile at profiles/{their Firebase UID}.
+      // The profile follows the account across phones, computers and browsers.
       allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
       allow create, update: if signedIn()
         && request.auth.uid == userId
-        && request.resource.data.email == request.auth.token.email;
+        && request.resource.data.email is string
+        && request.resource.data.email.lower() == authEmail()
+        && request.resource.data.role == 'customer';
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
     }
 

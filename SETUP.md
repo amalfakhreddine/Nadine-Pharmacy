@@ -42,3 +42,6 @@ Create every administrator in Firebase Authentication first. In the admin dashbo
 
 ## Customer profile and persistent sign-in fix
 Customer login now explicitly uses Firebase local persistence, so refreshing or reopening the browser should keep the customer signed in. Customer profile data is saved to `profiles/{customerUid}` and also cached on the current device as a fallback. You must publish the included `firestore.rules` in Firebase Console for cloud profile saving to work.
+## Customer profile cloud sync
+Customer profile details are stored in Firestore at `profiles/{customer UID}`. They automatically load on every device where the customer signs into the same Firebase account. Publish the included `firestore.rules` for this to work.
+
