@@ -1,6 +1,6 @@
 // Nadine Pharmacy Firebase web configuration.
 window.NADINE_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAxdijjMU9l6B4aJ_2OKYxgkoSN-julmQW8",
+  apiKey: "AIzaSyAxdijMU916B4aJ_2OKYxgkoSN-juLmQW8",
   authDomain: "nadine-pharmacy.firebaseapp.com",
   projectId: "nadine-pharmacy",
   storageBucket: "nadine-pharmacy.firebasestorage.app",
