@@ -48,3 +48,7 @@ After uploading the files, sign in to the admin panel, open **Settings**, set th
 5. Sign in using the new Firebase Authentication account.
 
 Publish the included `firestore.rules` before using this feature. The first login with the original admin email creates the secure `settings/adminAccess` document automatically.
+
+
+## Customer and admin profiles
+This version adds Firestore-backed customer profiles (contact details, default Tripoli delivery address, preferences, account statistics and password reset) and an admin profile (identity, contact details, role and security summary). Publish the included Firestore rules.
