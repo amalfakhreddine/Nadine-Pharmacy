@@ -52,3 +52,7 @@ Keep at least one authorised email. Removing your current email signs you out. P
 
 ## Customer and admin profiles
 This version adds Firestore-backed customer profiles and one shared admin profile stored at `settings/adminProfile`. Every authorised admin can read and edit the shared pharmacy identity, phone number and job title. Publish the included Firestore rules.
+
+
+## Customer profile and persistent sign-in fix
+Customer login now explicitly uses Firebase local persistence, so refreshing or reopening the browser should keep the customer signed in. Customer profile data is saved to `profiles/{customerUid}` and also cached on the current device as a fallback. You must publish the included `firestore.rules` in Firebase Console for cloud profile saving to work.

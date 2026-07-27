@@ -52,8 +52,12 @@ service cloud.firestore {
     }
 
     match /profiles/{userId} {
+      // Every signed-in customer owns their profile document at profiles/{uid}.
+      // This permits create and partial merge updates from the customer website.
       allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
-      allow create, update: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.email == request.auth.token.email;
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
     }
 

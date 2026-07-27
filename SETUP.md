@@ -38,3 +38,7 @@ Firebase web configuration is intentionally visible in browser code; security de
 
 ## 6. Multiple admins and shared profile
 Create every administrator in Firebase Authentication first. In the admin dashboard, open **Settings → Admin access emails**, enter one email per line, and save. All listed admins can edit the same shared profile under **Admin Profile**.
+
+
+## Customer profile and persistent sign-in fix
+Customer login now explicitly uses Firebase local persistence, so refreshing or reopening the browser should keep the customer signed in. Customer profile data is saved to `profiles/{customerUid}` and also cached on the current device as a fallback. You must publish the included `firestore.rules` in Firebase Console for cloud profile saving to work.
