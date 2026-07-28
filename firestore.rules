@@ -59,5 +59,20 @@ service cloud.firestore {
       allow read: if documentId != 'adminAccess';
       allow create, update, delete: if isAdmin();
     }
+
+    // Customers may queue exactly one fixed-recipient admin email for their own new order.
+    // Firebase's Trigger Email extension sends it securely using its server credentials.
+    match /mail/{mailId} {
+      allow create: if signedIn()
+        && request.resource.data.to == ["amalfakhreddinem@gmail.com"]
+        && request.resource.data.orderId is string
+        && mailId == "order-" + request.resource.data.orderId
+        && request.resource.data.message.subject is string
+        && request.resource.data.message.subject.matches('^New Nadine Parapharm order .*')
+        && request.resource.data.message.text is string
+        && request.resource.data.message.html is string;
+      allow read, update, delete: if false;
+    }
+
   }
 }

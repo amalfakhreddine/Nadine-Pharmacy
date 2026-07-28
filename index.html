@@ -114,7 +114,23 @@ async function placeOrder(){
       }
       const delivery=fulfillment==='pickup'?0:(subtotal>=Number(shopSettings.freeDeliveryThreshold||999999)?0:Number(shopSettings.deliveryFee||0));
       const order={id:orderId,createdAt:new Date().toISOString(),customerUid:user.uid,customerEmail:user.email||'',customer:name,phone,fulfillment,city:fulfillment==='delivery'?'Tripoli':'',area:fulfillment==='delivery'?$('cArea').value.trim():'',street:$('cStreet').value.trim(),building:$('cBuilding').value.trim(),floor:$('cFloor').value.trim(),apartment:$('cApartment').value.trim(),landmark:$('cLandmark').value.trim(),deliveryNotes:$('cNotes').value.trim(),payment:$('cPayment').value,items:verifiedItems,requiresPrescription:needsRx,prescriptionImage:prescriptionImage||'',prescriptionStatus:needsRx?'Pending pharmacist verification':'Not required',subtotal,delivery,total:subtotal+delivery,status:fulfillment==='pickup'?'New pickup':'New',unread:true,stockAdjusted:true};
-      tx.set(orderRef,order);return order;
+      tx.set(orderRef,order);
+      const adminOrderUrl=window.location.origin+'/admin.html?order='+encodeURIComponent(orderId);
+      const safeEmail=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+      const itemLines=verifiedItems.map(i=>`${Number(i.qty||0)} × ${safeEmail(i.name)} — ${money(Number(i.price||0)*Number(i.qty||0))}`).join('<br>');
+      const addressText=fulfillment==='pickup'?'Pickup from Nadine Parapharm':[order.area,order.street,order.building,order.floor&&('Floor '+order.floor),order.apartment&&('Apartment '+order.apartment)].filter(Boolean).join(', ');
+      const mailRef=db.collection('mail').doc('order-'+orderId);
+      tx.set(mailRef,{
+        to:['amalfakhreddinem@gmail.com'],
+        orderId,
+        message:{
+          subject:`New Nadine Parapharm order ${orderId} — ${money(order.total)}`,
+          text:`A new order was placed. Order: ${orderId}. Customer: ${name}. Phone: ${phone}. Total: ${money(order.total)}. Open the order: ${adminOrderUrl}`,
+          html:`<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#17221c"><h2 style="margin-bottom:4px">New order received</h2><p style="margin-top:0;color:#637067">Nadine Parapharm</p><div style="background:#f5f8f6;border:1px solid #dce5df;border-radius:12px;padding:18px"><p><b>Order:</b> ${safeEmail(orderId)}</p><p><b>Customer:</b> ${safeEmail(name)}</p><p><b>Phone:</b> ${safeEmail(phone)}</p><p><b>Fulfillment:</b> ${fulfillment==='pickup'?'Pharmacy pickup':'Tripoli delivery'}</p><p><b>Address:</b> ${safeEmail(addressText||'Not supplied')}</p><p><b>Items:</b><br>${itemLines}</p><p style="font-size:18px"><b>Total: ${safeEmail(money(order.total))}</b></p></div><p style="margin-top:20px"><a href="${adminOrderUrl}" style="display:inline-block;background:#126a43;color:white;text-decoration:none;padding:13px 20px;border-radius:9px;font-weight:bold">Open this order</a></p><p style="font-size:12px;color:#778078">Sign in to the admin dashboard when prompted.</p></div>`
+        },
+        createdAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+      return order;
     });
     cart=[];saveCart();$('checkoutForm').reset();$('rxPreview').style.display='none';$('rxPreview').innerHTML='';closeModal('checkoutModal');$('successText').innerHTML=`Your order number is <b>${orderId}</b>. ${finalOrder.fulfillment==='pickup'?'Pickup order':'Delivery order'} total: <b>${money(finalOrder.total)}</b>. It will appear instantly in the pharmacy admin.`;$('successModal').classList.add('show');setPageLocked(true);
   }catch(err){alert('Order could not be sent: '+err.message)}finally{submitBtn.disabled=false;submitBtn.textContent='Place order'}

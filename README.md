@@ -96,3 +96,7 @@ The admin dashboard now displays a persistent alert panel automatically whenever
 
 ## Expiry alert final fix
 The permanent top expiry panel now reads expiry values from standard date strings, Firestore Timestamp values, numeric timestamps, and legacy expiry field names. Expired products are always included, while future alerts cover the next six months.
+
+
+## Email notifications
+See `EMAIL-ORDER-ALERT-SETUP.md`. Email delivery requires installing Firebase Trigger Email once and publishing the included Firestore rules.
