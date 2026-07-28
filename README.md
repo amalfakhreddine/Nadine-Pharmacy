@@ -89,3 +89,7 @@ Deleted products are moved to the admin Trash, can be undone for 30 seconds, res
 - Receipts include customer, phone, address, ordered items, payment, totals, prescription status and fulfillment timeline.
 - A dedicated Receipts page provides searchable proof for all orders.
 - Status changes now save preparing, dispatch, ready, delivered, collected and cancellation timestamps.
+
+
+## Automatic expiry alerts
+The admin dashboard now displays a persistent alert panel automatically whenever any active product is expired or will expire within six months. No refresh or extra button is required.
