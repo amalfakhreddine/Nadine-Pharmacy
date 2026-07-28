@@ -82,3 +82,10 @@ The visible logo and favicon are embedded directly inside `index.html` and `admi
 
 ## Product deletion safety
 Deleted products are moved to the admin Trash, can be undone for 30 seconds, restored later, or permanently deleted after a second confirmation.
+
+
+## Admin receipts and order management
+- Every order has a detailed printable receipt.
+- Receipts include customer, phone, address, ordered items, payment, totals, prescription status and fulfillment timeline.
+- A dedicated Receipts page provides searchable proof for all orders.
+- Status changes now save preparing, dispatch, ready, delivered, collected and cancellation timestamps.
