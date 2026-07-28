@@ -70,3 +70,7 @@ Customer profile details are stored in Firestore at `profiles/{customer UID}`. T
 
 ## Prescription product filter
 The customer shop category filters include a dedicated **Prescription required** option. It displays only products marked as prescription-required by the pharmacy and shows a pharmacist-verification notice.
+
+
+## Brand assets
+The customer website and admin dashboard use the supplied Nadine Parapharm logo from the `assets` folder. The package includes responsive web, favicon, Apple touch icon, and social-sharing versions.
