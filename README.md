@@ -94,9 +94,5 @@ Deleted products are moved to the admin Trash, can be undone for 30 seconds, res
 ## Automatic expiry alerts
 The admin dashboard now displays a persistent alert panel automatically whenever any active product is expired or will expire within six months. No refresh or extra button is required.
 
-## Smooth permanent expiry panel update
-- Keeps one expiry-status panel permanently visible at the top of the admin area.
-- Removes the duplicate expiry card from the Dashboard.
-- Shows a clean green empty state when there are no expiry alerts.
-- Expired and near-expiry products remain sorted by urgency.
-- Clicking an alert opens that product directly for editing.
+## Expiry alert final fix
+The permanent top expiry panel now reads expiry values from standard date strings, Firestore Timestamp values, numeric timestamps, and legacy expiry field names. Expired products are always included, while future alerts cover the next six months.
