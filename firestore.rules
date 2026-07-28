@@ -2,28 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function authEmail() {
-      return signedIn() && request.auth.token.email is string
-        ? request.auth.token.email.lower()
-        : "";
-    }
     function fallbackAdmin() {
       return signedIn()
-        && authEmail() == "nadinepharmacy@gmail.com"
+        && request.auth.token.email == "nadinepharmacy@gmail.com"
         && !exists(/databases/$(database)/documents/settings/adminAccess);
     }
     function configuredAdmin() {
       return signedIn()
         && exists(/databases/$(database)/documents/settings/adminAccess)
         && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails is list
-        && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails.hasAny([authEmail()]);
+        && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails.hasAny([request.auth.token.email]);
     }
     function isAdmin() { return fallbackAdmin() || configuredAdmin(); }
-    function validAdminAccess() {
-      return request.resource.data.adminEmails is list
-        && request.resource.data.adminEmails.size() > 0
-        && request.resource.data.adminEmails.size() <= 25;
-    }
 
     match /orders/{orderId} {
       allow create: if signedIn()
@@ -52,14 +42,8 @@ service cloud.firestore {
     }
 
     match /profiles/{userId} {
-      // Each customer owns exactly one cloud profile at profiles/{their Firebase UID}.
-      // The profile follows the account across phones, computers and browsers.
       allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
-      allow create, update: if signedIn()
-        && request.auth.uid == userId
-        && request.resource.data.email is string
-        && request.resource.data.email.lower() == authEmail()
-        && request.resource.data.role == 'customer';
+      allow create, update: if signedIn() && request.auth.uid == userId;
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
     }
 
@@ -68,15 +52,7 @@ service cloud.firestore {
     }
 
     match /settings/adminAccess {
-      allow read: if isAdmin();
-      allow create: if fallbackAdmin() && validAdminAccess();
-      allow update: if isAdmin() && validAdminAccess();
-      allow delete: if false;
-    }
-
-    match /settings/adminProfile {
-      allow read, create, update: if isAdmin();
-      allow delete: if false;
+      allow read, create, update, delete: if isAdmin();
     }
 
     match /settings/{documentId} {

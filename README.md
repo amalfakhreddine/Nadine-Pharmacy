@@ -59,3 +59,11 @@ Customer login now explicitly uses Firebase local persistence, so refreshing or 
 ## Customer profile cloud sync
 Customer profile details are stored in Firestore at `profiles/{customer UID}`. They automatically load on every device where the customer signs into the same Firebase account. Publish the included `firestore.rules` for this to work.
 
+
+
+## Service-link update
+- Tripoli delivery card opens delivery details.
+- Pickup card opens the pharmacy Google Maps location.
+- Consultation and floating/footer WhatsApp links use +961 71 979 118.
+- Pharmacist verification card filters the shop to prescription-required products.
+- Opening hours are Monday–Saturday 8:30 AM–9:00 PM; Sunday closed.

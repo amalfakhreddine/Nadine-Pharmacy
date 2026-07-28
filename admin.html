@@ -22,7 +22,7 @@
 
 const firebaseReady=window.NADINE_FIREBASE_CONFIG&&window.NADINE_FIREBASE_CONFIG.apiKey&&!window.NADINE_FIREBASE_CONFIG.apiKey.startsWith('PASTE_');
 let auth=null,db=null;
-if(firebaseReady){firebase.initializeApp(window.NADINE_FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(err=>console.warn('Could not enable persistent sign-in',err));}
+if(firebaseReady){firebase.initializeApp(window.NADINE_FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();}
 function requireFirebase(){if(!firebaseReady){alert('Firebase is not configured yet. Open firebase-config.js and paste your Firebase web app settings.');return false}return true}
 
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
