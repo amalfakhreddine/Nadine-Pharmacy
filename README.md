@@ -74,3 +74,7 @@ The customer shop category filters include a dedicated **Prescription required**
 
 ## Brand assets
 The customer website and admin dashboard use the supplied Nadine Parapharm logo from the `assets` folder. The package includes responsive web, favicon, Apple touch icon, and social-sharing versions.
+
+
+## Embedded-logo reliability fix
+The visible logo and favicon are embedded directly inside `index.html` and `admin.html`, so they cannot appear as broken images even if the assets folder is omitted during deployment.
