@@ -78,3 +78,7 @@ The customer website and admin dashboard use the supplied Nadine Parapharm logo 
 
 ## Embedded-logo reliability fix
 The visible logo and favicon are embedded directly inside `index.html` and `admin.html`, so they cannot appear as broken images even if the assets folder is omitted during deployment.
+
+
+## Product deletion safety
+Deleted products are moved to the admin Trash, can be undone for 30 seconds, restored later, or permanently deleted after a second confirmation.
