@@ -130,15 +130,7 @@ body:has(#shell.show) #login{display:none!important;}
 
 const firebaseReady=window.NADINE_FIREBASE_CONFIG&&window.NADINE_FIREBASE_CONFIG.apiKey&&!window.NADINE_FIREBASE_CONFIG.apiKey.startsWith('PASTE_');
 let auth=null,db=null;
-let authPersistenceReady=Promise.resolve();
-if(firebaseReady){
-  firebase.initializeApp(window.NADINE_FIREBASE_CONFIG);
-  auth=firebase.auth();
-  db=firebase.firestore();
-  authPersistenceReady=auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).catch(e=>{
-    console.warn('Could not enable persistent login',e);
-  });
-}
+if(firebaseReady){firebase.initializeApp(window.NADINE_FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.warn('Could not enable persistent login',e));}
 function requireFirebase(){if(!firebaseReady){alert('Firebase is not configured yet. Open firebase-config.js and paste your Firebase web app settings.');return false}return true}
 
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
@@ -151,36 +143,20 @@ const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
 async function verifyAdminUser(user){
   if(!user)return false;
   const email=String(user.email||'').trim().toLowerCase();
-  const configuredPrimary=String(window.NADINE_ADMIN_EMAIL||'').trim().toLowerCase();
-  // The pharmacy's main Firebase account must never be locked out by an
-  // incomplete or accidentally edited Firestore allow-list.
-  if(email===PRIMARY_ADMIN_EMAIL || (configuredPrimary && email===configuredPrimary))return true;
-  try{
-    const access=await db.collection('settings').doc('adminAccess').get();
-    if(!access.exists)return false;
-    const data=access.data()||{};
-    const raw=Array.isArray(data.adminEmails)?data.adminEmails:Array.isArray(data.emails)?data.emails:[];
-    const emails=raw.map(x=>String(x).trim().toLowerCase()).filter(Boolean);
-    return emails.includes(email);
-  }catch(err){
-    console.error('Admin access check failed',err);
-    return false;
-  }
+  const configuredPrimary=String(window.NADINE_ADMIN_EMAIL||PRIMARY_ADMIN_EMAIL).trim().toLowerCase();
+  // Stable production gate: Firebase must authenticate the user and the
+  // authenticated email must be the pharmacy's primary admin account.
+  return email===PRIMARY_ADMIN_EMAIL && email===configuredPrimary;
 }
-async function openAdminApp(user){
+function openAdminApp(user){
   const activeUser=user||auth?.currentUser;
   if(!activeUser){
     lockAdminApp();
     return;
   }
   if(adminAppStarted)return;
-  // Refresh the Firebase ID token before opening Firestore listeners so the
-  // security rules evaluate the confirmed current account.
-  await activeUser.getIdToken(true);
-  if(auth.currentUser?.uid!==activeUser.uid){lockAdminApp();return;}
   adminAppStarted=true;
   document.body.classList.remove('auth-checking');
-  $('error').textContent='';
   $('login').style.display='none';
   $('shell').classList.add('show');
   $('shell').setAttribute('aria-hidden','false');
@@ -188,10 +164,6 @@ async function openAdminApp(user){
 }
 function lockAdminApp(message=''){
   adminAppStarted=false;
-  if(unsubscribeOrders){unsubscribeOrders();unsubscribeOrders=null;}
-  if(unsubscribeProducts){unsubscribeProducts();unsubscribeProducts=null;}
-  if(unsubscribeSettings){unsubscribeSettings();unsubscribeSettings=null;}
-  if(unsubscribeReviews){unsubscribeReviews();unsubscribeReviews=null;}
   document.body.classList.remove('auth-checking');
   $('shell').classList.remove('show');
   $('shell').setAttribute('aria-hidden','true');
@@ -204,17 +176,19 @@ async function login(){
   try{
     const cred=await auth.signInWithEmailAndPassword($('user').value.trim(),$('pass').value);
     if(!await verifyAdminUser(cred.user)){await auth.signOut();throw new Error('This account is not authorised as the pharmacy admin.');}
-    await openAdminApp(cred.user);
+    openAdminApp(cred.user);
   }catch(err){$('error').textContent=err.message}
 }
 if(firebaseReady){
-  authPersistenceReady.then(()=>auth.onAuthStateChanged(async user=>{
+  auth.onAuthStateChanged(async user=>{
     // Never reveal any dashboard content until authentication and authorisation both pass.
     if(!user){lockAdminApp();return;}
     try{
       const allowed=await verifyAdminUser(user);
-      if(allowed){await openAdminApp(user);}
-      else{
+      if(allowed){
+        await user.getIdToken(true);
+        openAdminApp(user);
+      }else{
         await auth.signOut();
         lockAdminApp('This account is not authorised as the pharmacy admin.');
       }
@@ -223,7 +197,7 @@ if(firebaseReady){
       lockAdminApp('Could not verify admin access. Please sign in again.');
       console.error(e);
     }
-  }));
+  });
 }else{
   lockAdminApp('Firebase is not configured.');
 }
@@ -306,7 +280,7 @@ function openDeepLinkedOrder(){
   setTimeout(()=>openReceipt(found.id||found.docId),120);
   try{history.replaceState({},document.title,window.location.pathname)}catch(e){}
 }
-function startOrdersListener(){if(unsubscribeOrders)unsubscribeOrders();ordersListenerReady=false;unsubscribeOrders=db.collection('orders').orderBy('createdAt','desc').onSnapshot(snap=>{const newlyAdded=ordersListenerReady?snap.docChanges().filter(c=>c.type==='added').map(c=>({docId:c.doc.id,...c.doc.data()})):[];orders=snap.docs.map(d=>({docId:d.id,...d.data()}));renderAll();openDeepLinkedOrder();newlyAdded.reverse().forEach(announceNewOrder);ordersListenerReady=true},err=>{console.error('Orders could not load',err);if(adminAppStarted)alert('Orders could not load: '+err.message)})}
+function startOrdersListener(){if(unsubscribeOrders)unsubscribeOrders();ordersListenerReady=false;unsubscribeOrders=db.collection('orders').orderBy('createdAt','desc').onSnapshot(snap=>{const newlyAdded=ordersListenerReady?snap.docChanges().filter(c=>c.type==='added').map(c=>({docId:c.doc.id,...c.doc.data()})):[];orders=snap.docs.map(d=>({docId:d.id,...d.data()}));renderAll();openDeepLinkedOrder();newlyAdded.reverse().forEach(announceNewOrder);ordersListenerReady=true},err=>{$('error').textContent='Orders could not load: '+err.message})}
 function startReviewsListener(){if(unsubscribeReviews)unsubscribeReviews();unsubscribeReviews=db.collection('reviews').orderBy('createdAt','desc').onSnapshot(snap=>{reviews=snap.docs.map(d=>({id:d.id,...d.data()}));renderAdminReviews();updateReviewBadge()},e=>console.warn('Reviews could not load',e))}
 function updateReviewBadge(){const n=reviews.filter(r=>r.status==='pending').length,el=$('reviewNavCount');if(!el)return;el.textContent=n;el.style.display=n?'inline-flex':'none'}
 function reviewDate(v){try{return v?.toDate?v.toDate():new Date(v)}catch(e){return null}}

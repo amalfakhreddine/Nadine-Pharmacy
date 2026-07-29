@@ -51,7 +51,7 @@ service cloud.firestore {
     }
 
     match /settings/adminAccess {
-      allow read, create, update, delete: if isAdmin();
+      allow read, create, update, delete: if primaryAdmin();
     }
 
     match /settings/{documentId} {
