@@ -98,48 +98,61 @@ function cartNeedsPrescription(){return cart.some(x=>{const p=products.find(y=>S
 async function previewPrescription(){const file=$('cPrescription').files[0];if(!file){$('rxPreview').style.display='none';$('rxPreview').innerHTML='';return}try{const data=await compressPrescription(file);$('rxPreview').innerHTML=`<img src="${data}" alt="Prescription preview"><div class="rx-note">Please confirm the entire prescription is visible and readable.</div>`;$('rxPreview').style.display='block'}catch(err){$('cPrescription').value='';$('rxPreview').style.display='none';alert(err.message)}}
 async function placeOrder(){
   if(!requireFirebase())return;
-  const user=auth.currentUser;if(!user){closeModal('checkoutModal');openAuth();return alert('Please sign in before placing an order.');}
-  const name=$('cName').value.trim(),phone=$('cPhone').value.trim(),needsRx=cartNeedsPrescription(),fulfillment=currentFulfillment();if(!name||!phone)return alert('Please add your name and phone number.');if(fulfillment==='delivery'&&['cArea','cStreet','cBuilding'].some(id=>!$(id).value.trim()))return alert('Please complete the Tripoli area, street and building fields.');let prescriptionImage='';if(needsRx){const file=$('cPrescription').files[0];if(!file)return alert('This order contains a prescription medicine. Please upload a clear prescription photo, or contact/visit the pharmacy if you cannot upload it.');try{prescriptionImage=await compressPrescription(file)}catch(err){return alert(err.message)}}
-  const orderId='NP-'+Date.now().toString().slice(-7),orderRef=db.collection('orders').doc(orderId),cartSnapshot=structuredClone(cart);
-  const submitBtn=$('checkoutForm').querySelector('button[type="submit"]');submitBtn.disabled=true;submitBtn.textContent='Placing order...';
+  const user=auth.currentUser;
+  if(!user){closeModal('checkoutModal');openAuth();return alert('Please sign in before placing an order.');}
+  const name=$('cName').value.trim(),phone=$('cPhone').value.trim(),needsRx=cartNeedsPrescription(),fulfillment=currentFulfillment();
+  if(!name||!phone)return alert('Please add your name and phone number.');
+  if(fulfillment==='delivery'&&['cArea','cStreet','cBuilding'].some(id=>!$(id).value.trim()))return alert('Please complete the Tripoli area, street and building fields.');
+  let prescriptionImage='';
+  if(needsRx){
+    const file=$('cPrescription').files[0];
+    if(!file)return alert('This order contains a prescription medicine. Please upload a clear prescription photo, or contact/visit the pharmacy if you cannot upload it.');
+    try{prescriptionImage=await compressPrescription(file)}catch(err){return alert(err.message)}
+  }
+  const submitBtn=$('checkoutForm').querySelector('button[type="submit"]');
+  submitBtn.disabled=true;submitBtn.textContent='Placing order...';
   try{
-    const finalOrder=await db.runTransaction(async tx=>{
-      let verifiedItems=[],subtotal=0,stockWrites=[];
-      // Firestore transactions require every read to finish before the first write.
-      for(const requested of cartSnapshot){
-        const ref=db.collection('products').doc(String(requested.id)),snap=await tx.get(ref);
-        if(!snap.exists)throw new Error(requested.name+' is no longer available.');
-        const product=snap.data(),qty=Math.max(1,Math.floor(Number(requested.qty)||0));
-        if(product.active===false||Number(product.stock||0)<qty)throw new Error('Not enough stock for '+product.name+'.');
-        const price=Number(product.price||0);if(!Number.isFinite(price)||price<0)throw new Error('Invalid price for '+product.name+'.');
-        verifiedItems.push({id:snap.id,name:String(product.name||requested.name),price,qty,prescriptionRequired:!!product.prescriptionRequired});subtotal+=price*qty;
-        stockWrites.push({ref,newStock:Number(product.stock)-qty});
-      }
-      // Only write after all product reads above are complete.
-      for(const item of stockWrites){
-        tx.update(item.ref,{stock:item.newStock,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-      }
-      const delivery=fulfillment==='pickup'?0:(subtotal>=Number(shopSettings.freeDeliveryThreshold||999999)?0:Number(shopSettings.deliveryFee||0));
-      const order={id:orderId,createdAt:new Date().toISOString(),customerUid:user.uid,customerEmail:user.email||'',customer:name,phone,fulfillment,city:fulfillment==='delivery'?'Tripoli':'',area:fulfillment==='delivery'?$('cArea').value.trim():'',street:$('cStreet').value.trim(),building:$('cBuilding').value.trim(),floor:$('cFloor').value.trim(),apartment:$('cApartment').value.trim(),landmark:$('cLandmark').value.trim(),deliveryNotes:$('cNotes').value.trim(),payment:$('cPayment').value,items:verifiedItems,requiresPrescription:needsRx,prescriptionImage:prescriptionImage||'',prescriptionStatus:needsRx?'Pending pharmacist verification':'Not required',subtotal,delivery,total:subtotal+delivery,status:fulfillment==='pickup'?'New pickup':'New',unread:true,stockAdjusted:true};
-      tx.set(orderRef,order);
-      const adminOrderUrl=window.location.origin+'/admin.html?order='+encodeURIComponent(orderId);
-      const safeEmail=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-      const itemLines=verifiedItems.map(i=>`${Number(i.qty||0)} × ${safeEmail(i.name)} — ${money(Number(i.price||0)*Number(i.qty||0))}`).join('<br>');
-      const addressText=fulfillment==='pickup'?'Pickup from Nadine Parapharm':[order.area,order.street,order.building,order.floor&&('Floor '+order.floor),order.apartment&&('Apartment '+order.apartment)].filter(Boolean).join(', ');
-      const mailRef=db.collection('mail').doc('order-'+orderId);
-      tx.set(mailRef,{
-        to:['amalfakhreddinem@gmail.com'],
-        orderId,
-        message:{
-          subject:`New Nadine Parapharm order ${orderId} — ${money(order.total)}`,
-          text:`A new order was placed. Order: ${orderId}. Customer: ${name}. Phone: ${phone}. Total: ${money(order.total)}. Open the order: ${adminOrderUrl}`,
-          html:`<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#17221c"><h2 style="margin-bottom:4px">New order received</h2><p style="margin-top:0;color:#637067">Nadine Parapharm</p><div style="background:#f5f8f6;border:1px solid #dce5df;border-radius:12px;padding:18px"><p><b>Order:</b> ${safeEmail(orderId)}</p><p><b>Customer:</b> ${safeEmail(name)}</p><p><b>Phone:</b> ${safeEmail(phone)}</p><p><b>Fulfillment:</b> ${fulfillment==='pickup'?'Pharmacy pickup':'Tripoli delivery'}</p><p><b>Address:</b> ${safeEmail(addressText||'Not supplied')}</p><p><b>Items:</b><br>${itemLines}</p><p style="font-size:18px"><b>Total: ${safeEmail(money(order.total))}</b></p></div><p style="margin-top:20px"><a href="${adminOrderUrl}" style="display:inline-block;background:#126a43;color:white;text-decoration:none;padding:13px 20px;border-radius:9px;font-weight:bold">Open this order</a></p><p style="font-size:12px;color:#778078">Sign in to the admin dashboard when prompted.</p></div>`
-        },
-        createdAt:firebase.firestore.FieldValue.serverTimestamp()
-      });
-      return order;
-    });
-    cart=[];saveCart();$('checkoutForm').reset();$('rxPreview').style.display='none';$('rxPreview').innerHTML='';closeModal('checkoutModal');$('successText').innerHTML=`Your order number is <b>${orderId}</b>. ${finalOrder.fulfillment==='pickup'?'Pickup order':'Delivery order'} total: <b>${money(finalOrder.total)}</b>. It will appear instantly in the pharmacy admin.`;$('successModal').classList.add('show');setPageLocked(true);
+    // Build the order from the current public product data. The customer performs
+    // one protected Firestore write only, so optional stock/email actions cannot
+    // cancel the order with a permissions error.
+    const verifiedItems=[];let subtotal=0;
+    for(const requested of structuredClone(cart)){
+      const product=products.find(p=>String(p.id)===String(requested.id));
+      if(!product||product.active===false)throw new Error(requested.name+' is no longer available.');
+      const qty=Math.max(1,Math.floor(Number(requested.qty)||0));
+      if(Number(product.stock||0)<qty)throw new Error('Not enough stock for '+product.name+'.');
+      const price=Number(product.price||0);
+      if(!Number.isFinite(price)||price<0)throw new Error('Invalid price for '+product.name+'.');
+      verifiedItems.push({id:String(product.id),name:String(product.name||requested.name),price,qty,prescriptionRequired:!!product.prescriptionRequired});
+      subtotal+=price*qty;
+    }
+    const delivery=fulfillment==='pickup'?0:(subtotal>=Number(shopSettings.freeDeliveryThreshold||999999)?0:Number(shopSettings.deliveryFee||0));
+    const orderId='NP-'+Date.now().toString().slice(-7);
+    const order={
+      id:orderId,
+      createdAt:new Date().toISOString(),
+      customerUid:user.uid,
+      customerEmail:user.email||'',
+      customer:name,
+      phone,
+      fulfillment,
+      city:fulfillment==='delivery'?'Tripoli':'',
+      area:fulfillment==='delivery'?$('cArea').value.trim():'',
+      street:$('cStreet').value.trim(),building:$('cBuilding').value.trim(),floor:$('cFloor').value.trim(),apartment:$('cApartment').value.trim(),landmark:$('cLandmark').value.trim(),deliveryNotes:$('cNotes').value.trim(),
+      payment:$('cPayment').value,
+      items:verifiedItems,
+      requiresPrescription:needsRx,
+      prescriptionImage:prescriptionImage||'',
+      prescriptionStatus:needsRx?'Pending pharmacist verification':'Not required',
+      subtotal,delivery,total:subtotal+delivery,
+      status:fulfillment==='pickup'?'New pickup':'New',
+      unread:true,
+      stockAdjusted:false
+    };
+    await db.collection('orders').doc(orderId).set(order);
+    cart=[];saveCart();$('checkoutForm').reset();$('rxPreview').style.display='none';$('rxPreview').innerHTML='';closeModal('checkoutModal');
+    $('successText').innerHTML=`Your order number is <b>${orderId}</b>. ${order.fulfillment==='pickup'?'Pickup order':'Delivery order'} total: <b>${money(order.total)}</b>. It will appear instantly in the pharmacy admin.`;
+    $('successModal').classList.add('show');setPageLocked(true);
   }catch(err){alert('Order could not be sent: '+err.message)}finally{submitBtn.disabled=false;submitBtn.textContent='Place order'}
 }
 async function openMyOrders(){
