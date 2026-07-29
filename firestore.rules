@@ -2,10 +2,9 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function fallbackAdmin() {
+    function primaryAdmin() {
       return signedIn()
-        && request.auth.token.email == "nadinepharmacy@gmail.com"
-        && !exists(/databases/$(database)/documents/settings/adminAccess);
+        && request.auth.token.email == "nadinepharmacy@gmail.com";
     }
     function configuredAdmin() {
       return signedIn()
@@ -13,7 +12,7 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails is list
         && get(/databases/$(database)/documents/settings/adminAccess).data.adminEmails.hasAny([request.auth.token.email]);
     }
-    function isAdmin() { return fallbackAdmin() || configuredAdmin(); }
+    function isAdmin() { return primaryAdmin() || configuredAdmin(); }
 
     match /orders/{orderId} {
       allow create: if signedIn()
