@@ -59,8 +59,20 @@ service cloud.firestore {
 
 
     match /adminPushTokens/{tokenDoc} {
-      allow read, create, update, delete: if isAdmin()
-        && (request.method == 'read' || request.resource.data.uid == request.auth.uid);
+      // Admin devices may register their own FCM token. Explicit rules avoid
+      // evaluating request.resource during reads/deletes, where it is absent.
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.token is string
+        && request.resource.data.active == true;
+      allow update: if isAdmin()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.token is string;
+      allow delete: if isAdmin() && resource.data.uid == request.auth.uid;
     }
 
     match /notificationEvents/{eventId} {
