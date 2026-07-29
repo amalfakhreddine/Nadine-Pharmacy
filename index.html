@@ -104,7 +104,8 @@ async function placeOrder(){
   const submitBtn=$('checkoutForm').querySelector('button[type="submit"]');submitBtn.disabled=true;submitBtn.textContent='Placing order...';
   try{
     const finalOrder=await db.runTransaction(async tx=>{
-      let verifiedItems=[],subtotal=0;
+      let verifiedItems=[],subtotal=0,stockWrites=[];
+      // Firestore transactions require every read to finish before the first write.
       for(const requested of cartSnapshot){
         const ref=db.collection('products').doc(String(requested.id)),snap=await tx.get(ref);
         if(!snap.exists)throw new Error(requested.name+' is no longer available.');
@@ -112,7 +113,11 @@ async function placeOrder(){
         if(product.active===false||Number(product.stock||0)<qty)throw new Error('Not enough stock for '+product.name+'.');
         const price=Number(product.price||0);if(!Number.isFinite(price)||price<0)throw new Error('Invalid price for '+product.name+'.');
         verifiedItems.push({id:snap.id,name:String(product.name||requested.name),price,qty,prescriptionRequired:!!product.prescriptionRequired});subtotal+=price*qty;
-        tx.update(ref,{stock:Number(product.stock)-qty,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        stockWrites.push({ref,newStock:Number(product.stock)-qty});
+      }
+      // Only write after all product reads above are complete.
+      for(const item of stockWrites){
+        tx.update(item.ref,{stock:item.newStock,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
       }
       const delivery=fulfillment==='pickup'?0:(subtotal>=Number(shopSettings.freeDeliveryThreshold||999999)?0:Number(shopSettings.deliveryFee||0));
       const order={id:orderId,createdAt:new Date().toISOString(),customerUid:user.uid,customerEmail:user.email||'',customer:name,phone,fulfillment,city:fulfillment==='delivery'?'Tripoli':'',area:fulfillment==='delivery'?$('cArea').value.trim():'',street:$('cStreet').value.trim(),building:$('cBuilding').value.trim(),floor:$('cFloor').value.trim(),apartment:$('cApartment').value.trim(),landmark:$('cLandmark').value.trim(),deliveryNotes:$('cNotes').value.trim(),payment:$('cPayment').value,items:verifiedItems,requiresPrescription:needsRx,prescriptionImage:prescriptionImage||'',prescriptionStatus:needsRx?'Pending pharmacist verification':'Not required',subtotal,delivery,total:subtotal+delivery,status:fulfillment==='pickup'?'New pickup':'New',unread:true,stockAdjusted:true};
