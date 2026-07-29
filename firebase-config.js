@@ -9,3 +9,6 @@ window.NADINE_FIREBASE_CONFIG = {
 };
 
 window.NADINE_ADMIN_EMAIL = "nadinepharmacy@gmail.com";
+
+// Paste the PUBLIC Web Push certificate key from Firebase Console > Project settings > Cloud Messaging.
+window.NADINE_FCM_VAPID_KEY = "PASTE_YOUR_PUBLIC_VAPID_KEY_HERE";

@@ -125,6 +125,7 @@ body:has(#shell.show) #login{display:none!important;}
 <div class="undo-snackbar" id="undoSnackbar"><span id="undoMessage">Product moved to Trash.</span><button type="button" onclick="undoLastDelete()">UNDO <span id="undoCountdown">30</span></button></div><div class="order-toast" id="orderToast" role="alert" aria-live="assertive"><div class="order-toast-head"><div><h3>🔔 New order received</h3><p id="orderToastText">A customer placed a new order.</p></div><button class="order-toast-close" onclick="closeOrderToast()" aria-label="Close">×</button></div><div class="order-toast-actions"><button class="save" onclick="openLatestNewOrder()">Open new orders</button><button class="secondary" onclick="closeOrderToast()">Dismiss</button></div></div><div class="receipt-overlay" id="receiptOverlay" onclick="if(event.target===this)closeReceipt()"><div class="receipt-dialog"><div class="receipt-actions"><b>Order receipt</b><div class="row-actions"><button class="secondary" onclick="window.print()">Print / Save PDF</button><button class="secondary" onclick="closeReceipt()">Close</button></div></div><div class="receipt-paper" id="receiptPaper"></div></div></div><script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
 <script src="firebase-config.js"></script><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 
@@ -202,65 +203,76 @@ if(firebaseReady){
   lockAdminApp('Firebase is not configured.');
 }
 async function logout(){lockAdminApp();if(auth)await auth.signOut();location.reload()}async function resetAdminPassword(){if(!requireFirebase())return;const email=$('user').value.trim();if(!email)return alert('Enter the admin email first.');try{await auth.sendPasswordResetEmail(email);alert('A password-reset email was sent to '+email+'. Please check your inbox. (Because this email service is newly configured, the message may occasionally appear in your Spam or Junk folder.)')}catch(err){alert(err.message)}}
-let orderAudioContext=null,orderAlarmTimer=null,orderAlarmActive=false,orderToastTimer=null,lastAnnouncedOrderId=null,ordersListenerReady=false,orderNotificationRegistration=null;
+let orderAudioContext=null,orderAlarmTimer=null,orderAlarmActive=false,orderToastTimer=null,lastAnnouncedOrderId=null,ordersListenerReady=false,orderNotificationRegistration=null,orderAlertAudio=null,messaging=null;
 const desktopNotificationAvailable=()=>typeof window.Notification!=='undefined'&&typeof window.Notification.requestPermission==='function';
+function validVapidKey(){const k=String(window.NADINE_FCM_VAPID_KEY||'').trim();return k&&k!=='PASTE_YOUR_PUBLIC_VAPID_KEY_HERE'&&k.length>40?k:''}
 async function prepareOrderNotifications(){
   if(!('serviceWorker' in navigator)||!window.isSecureContext)return null;
   try{
     orderNotificationRegistration=await navigator.serviceWorker.register('/notification-sw.js',{scope:'/'});
     await navigator.serviceWorker.ready;
+    if(firebase.messaging&&firebase.messaging.isSupported&&await firebase.messaging.isSupported()){
+      messaging=firebase.messaging();
+      messaging.onMessage(payload=>{
+        console.log('Foreground FCM order alert',payload);
+        const d=payload.data||{};
+        if(d.orderId&&String(d.orderId)===String(lastAnnouncedOrderId))return;
+        showDesktopOrderNotification(d.title||'NEW ORDER — Nadine Parapharm',{body:d.body||'A new customer order was received.',tag:'order-'+(d.orderId||Date.now()),renotify:true,requireInteraction:true,icon:'/assets/favicon-96.png',badge:'/assets/favicon-96.png',data:{url:d.url||'/admin'}});
+        startOrderAlarm();flashOrderTitle();
+      });
+    }
     return orderNotificationRegistration;
   }catch(e){console.warn('Notification service worker unavailable',e);return null}
 }
 prepareOrderNotifications();
+async function saveFcmToken(){
+  const key=validVapidKey();
+  if(!key)throw new Error('FCM VAPID key is not configured yet.');
+  if(!messaging)throw new Error('Firebase Messaging is unavailable in this browser.');
+  const token=await messaging.getToken({vapidKey:key,serviceWorkerRegistration:orderNotificationRegistration});
+  if(!token)throw new Error('Firebase did not return a notification token.');
+  let deviceId=localStorage.getItem('nadineFcmDeviceId');
+  if(!deviceId){deviceId=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));localStorage.setItem('nadineFcmDeviceId',deviceId)}
+  await db.collection('adminPushTokens').doc(auth.currentUser.uid+'_'+deviceId).set({
+    token,uid:auth.currentUser.uid,email:auth.currentUser.email||'',deviceId,
+    userAgent:navigator.userAgent,active:true,
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  },{merge:true});
+  localStorage.setItem('nadineFcmRegistered','yes');
+  return token;
+}
 function updateOrderAlertButton(){
   const b=$('orderAlertToggle');if(!b)return;
   const permission=desktopNotificationAvailable()?window.Notification.permission:'unavailable';
-  if(permission==='granted'){b.textContent='🔔 Computer alerts on';b.classList.add('enabled');b.classList.remove('denied')}
+  const pushReady=localStorage.getItem('nadineFcmRegistered')==='yes';
+  if(permission==='granted'&&pushReady){b.textContent='🔔 Background alerts on';b.classList.add('enabled');b.classList.remove('denied')}
+  else if(permission==='granted'){b.textContent='🔔 Finish push setup';b.classList.remove('enabled','denied')}
   else if(permission==='denied'){b.textContent='🔊 Sound on · messages blocked';b.classList.add('denied');b.classList.remove('enabled')}
   else if(permission==='unavailable'){b.textContent='🔊 Enable sound alerts';b.classList.add('enabled');b.classList.remove('denied')}
-  else{b.textContent='🔔 Enable computer alerts';b.classList.remove('enabled','denied')}
+  else{b.textContent='🔔 Enable background alerts';b.classList.remove('enabled','denied')}
 }
 async function showDesktopOrderNotification(title,options={}){
   if(!desktopNotificationAvailable()||window.Notification.permission!=='granted')return false;
-  try{
-    const reg=orderNotificationRegistration||await prepareOrderNotifications();
-    if(reg&&typeof reg.showNotification==='function'){
-      await reg.showNotification(title,options);
-      return true;
-    }
-    const n=new window.Notification(title,options);
-    n.onclick=()=>{window.focus();showPanel('orders');stopOrderAlarm();clearInterval(titleFlashTimer);document.title=originalPageTitle;n.close()};
-    return true;
-  }catch(e){console.warn('Desktop notification failed',e);return false}
+  try{const reg=orderNotificationRegistration||await prepareOrderNotifications();if(reg&&typeof reg.showNotification==='function'){await reg.showNotification(title,options);return true}const n=new window.Notification(title,options);n.onclick=()=>{window.focus();showPanel('orders');stopOrderAlarm();clearInterval(titleFlashTimer);document.title=originalPageTitle;n.close()};return true}catch(e){console.warn('Desktop notification failed',e);return false}
 }
-function unlockOrderAudio(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;if(!orderAudioContext)orderAudioContext=new C();if(orderAudioContext.state==='suspended')orderAudioContext.resume();const o=orderAudioContext.createOscillator(),g=orderAudioContext.createGain();g.gain.value=.00001;o.connect(g);g.connect(orderAudioContext.destination);o.start();o.stop(orderAudioContext.currentTime+.02);localStorage.setItem('nadineAudioUnlocked','yes')}catch(e){console.warn('Audio unlock failed',e)}}
+function unlockOrderAudio(){try{if(!orderAlertAudio){orderAlertAudio=new Audio('/order-alert.wav');orderAlertAudio.preload='auto';orderAlertAudio.volume=1}orderAlertAudio.muted=true;const p=orderAlertAudio.play();if(p&&p.then)p.then(()=>{orderAlertAudio.pause();orderAlertAudio.currentTime=0;orderAlertAudio.muted=false}).catch(()=>{orderAlertAudio.muted=false});const C=window.AudioContext||window.webkitAudioContext;if(C){if(!orderAudioContext)orderAudioContext=new C();if(orderAudioContext.state==='suspended')orderAudioContext.resume()}localStorage.setItem('nadineAudioUnlocked','yes')}catch(e){console.warn('Audio unlock failed',e)}}
 document.addEventListener('pointerdown',unlockOrderAudio,{once:true});
 async function enableOrderNotifications(){
-  unlockOrderAudio();playOrderSound();
-  localStorage.setItem('nadineAudioUnlocked','yes');
-  if(!window.isSecureContext){alert('Sound alerts are enabled. Desktop messages require the secure HTTPS website.');updateOrderAlertButton();return}
-  if(!desktopNotificationAvailable()){
-    alert('Sound and large on-screen order alerts are enabled. Desktop messages are unavailable in this browser profile, so use current Chrome or Edge and allow Notifications in the padlock beside the address.');
-    updateOrderAlertButton();return;
-  }
+  unlockOrderAudio();playOrderSound();localStorage.setItem('nadineAudioUnlocked','yes');
+  if(!window.isSecureContext){alert('Push notifications require the secure HTTPS website.');updateOrderAlertButton();return}
+  if(!desktopNotificationAvailable()){alert('This browser does not support web push. Use current Chrome, Edge, Firefox, or Safari and install/open the website normally.');updateOrderAlertButton();return}
   try{
     await prepareOrderNotifications();
     const result=await window.Notification.requestPermission();
-    localStorage.setItem('nadineOrderAlerts',result==='granted'?'on':'off');
-    updateOrderAlertButton();
-    if(result==='granted'){
-      await showDesktopOrderNotification('Nadine Parapharm alerts enabled',{body:'A computer message and sound will appear for every new order.',icon:'/assets/favicon-96.png',badge:'/assets/favicon-96.png',tag:'nadine-alert-test'});
-      alert('Computer alerts are enabled. A test message and sound were sent.');
-    }else if(result==='denied'){
-      alert('Chrome has blocked notifications for this website. Click the icon beside the website address → Site settings → Notifications → Allow, then reload and press Enable computer alerts again. Sound and the large on-screen message will still work.');
-    }
-  }catch(e){
-    console.error(e);
-    alert('Sound and on-screen alerts are enabled. Chrome could not start desktop messages. Open Site settings for this website, set Notifications to Allow, reload, and try again.');
-  }
+    if(result!=='granted'){localStorage.setItem('nadineOrderAlerts','off');updateOrderAlertButton();alert('Notifications are blocked. Open the browser site settings for this website, set Notifications to Allow, reload, then press Enable background alerts again.');return}
+    await saveFcmToken();
+    localStorage.setItem('nadineOrderAlerts','on');updateOrderAlertButton();
+    await showDesktopOrderNotification('Nadine Parapharm background alerts enabled',{body:'New-order push notifications are now registered on this device.',icon:'/assets/favicon-96.png',badge:'/assets/favicon-96.png',tag:'nadine-alert-test'});
+    alert('Background push alerts are enabled on this device. You may close the admin tab; keep browser and operating-system notifications allowed.');
+  }catch(e){console.error(e);localStorage.setItem('nadineFcmRegistered','no');updateOrderAlertButton();alert('Could not enable Firebase push notifications: '+e.message)}
 }
-function playOrderSound(){try{unlockOrderAudio();const c=orderAudioContext;if(!c)return;const now=c.currentTime;[880,1175,880].forEach((freq,i)=>{const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(c.destination);const t=now+i*.28;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.28,t+.025);g.gain.exponentialRampToValueAtTime(.0001,t+.22);o.start(t);o.stop(t+.24)})}catch(e){console.warn('Order sound failed',e)}}
+function playOrderSound(){try{unlockOrderAudio();if(orderAlertAudio){orderAlertAudio.pause();orderAlertAudio.currentTime=0;orderAlertAudio.volume=1;const p=orderAlertAudio.play();if(p&&p.catch)p.catch(e=>console.warn('Audio playback blocked until Enable alerts is pressed',e));return}const c=orderAudioContext;if(!c)return;const now=c.currentTime;[880,1175,880].forEach((freq,i)=>{const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(c.destination);const t=now+i*.28;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.35,t+.025);g.gain.exponentialRampToValueAtTime(.0001,t+.22);o.start(t);o.stop(t+.24)})}catch(e){console.warn('Order sound failed',e)}}
 function startOrderAlarm(){stopOrderAlarm();orderAlarmActive=true;playOrderSound();orderAlarmTimer=setInterval(()=>{if(orderAlarmActive)playOrderSound()},3500)}
 function stopOrderAlarm(){orderAlarmActive=false;if(orderAlarmTimer){clearInterval(orderAlarmTimer);orderAlarmTimer=null}}
 let originalPageTitle=document.title,titleFlashTimer=null;
