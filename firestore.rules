@@ -17,7 +17,10 @@ service cloud.firestore {
     match /orders/{orderId} {
       allow create: if signedIn()
         && request.resource.data.customerUid == request.auth.uid
-        && request.resource.data.status == "New"
+        && request.resource.data.status in ["New", "New pickup"]
+        && request.resource.data.fulfillment in ["delivery", "pickup"]
+        && ((request.resource.data.fulfillment == "delivery" && request.resource.data.status == "New")
+          || (request.resource.data.fulfillment == "pickup" && request.resource.data.status == "New pickup"))
         && request.resource.data.unread == true
         && request.resource.data.total is number
         && request.resource.data.total >= 0
