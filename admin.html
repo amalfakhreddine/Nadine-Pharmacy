@@ -96,7 +96,7 @@ body.menu-open .menu-overlay{opacity:1;visibility:visible}.main{width:100%;paddi
 
 const firebaseReady=window.NADINE_FIREBASE_CONFIG&&window.NADINE_FIREBASE_CONFIG.apiKey&&!window.NADINE_FIREBASE_CONFIG.apiKey.startsWith('PASTE_');
 let auth=null,db=null;
-if(firebaseReady){firebase.initializeApp(window.NADINE_FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();}
+if(firebaseReady){firebase.initializeApp(window.NADINE_FIREBASE_CONFIG);auth=firebase.auth();db=firebase.firestore();auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(e=>console.warn('Could not enable persistent login',e));}
 function requireFirebase(){if(!firebaseReady){alert('Firebase is not configured yet. Open firebase-config.js and paste your Firebase web app settings.');return false}return true}
 
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
@@ -104,15 +104,58 @@ const defaultCategories=['Medicines','Skincare','Vitamins','Supplements','Baby C
 function safeRead(key,fallback){try{const raw=localStorage.getItem(key);if(!raw)return structuredClone(fallback);const parsed=JSON.parse(raw);return Array.isArray(parsed)&&parsed.length?parsed:structuredClone(fallback)}catch(e){return structuredClone(fallback)}}
 let products=[],trashProducts=[],categories=[...defaultCategories],orders=[],editingId=null,editingImages=[],unsubscribeOrders=null,unsubscribeProducts=null,unsubscribeSettings=null,unsubscribeReviews=null,undoTimer=null,undoProductId=null,profiles=[],reviews=[],auditLogs=[],charts={};
 function openCustomerSite(){const url=new URL('index.html',window.location.href);window.open(url.href,'_blank')}const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
-async function login(){if(!requireFirebase())return;try{let cred=await auth.signInWithEmailAndPassword($('user').value.trim(),$('pass').value);try{const access=await db.collection('settings').doc('adminAccess').get();if(!access.exists){const fallback=(window.NADINE_ADMIN_EMAIL||'').toLowerCase();if((cred.user.email||'').toLowerCase()!==fallback)throw new Error('not-authorised');await db.collection('settings').doc('adminAccess').set({adminEmails:[cred.user.email.toLowerCase()],updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}}catch(accessErr){await auth.signOut();throw new Error('This account is not authorised as the pharmacy admin.')} $('login').style.display='none';$('shell').classList.add('show');startOrdersListener();startCatalogListeners();startReviewsListener();renderAll();updateOrderAlertButton()}catch(err){$('error').textContent=err.message}}
+let adminAppStarted=false;
+async function verifyAdminUser(user){
+  if(!user)return false;
+  const email=(user.email||'').toLowerCase();
+  const access=await db.collection('settings').doc('adminAccess').get();
+  if(access.exists){
+    const emails=Array.isArray(access.data().adminEmails)?access.data().adminEmails.map(x=>String(x).toLowerCase()):[];
+    return emails.includes(email);
+  }
+  const fallback=(window.NADINE_ADMIN_EMAIL||'').toLowerCase();
+  if(email!==fallback)return false;
+  await db.collection('settings').doc('adminAccess').set({adminEmails:[email],updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  return true;
+}
+function openAdminApp(){
+  if(adminAppStarted)return;
+  adminAppStarted=true;
+  $('login').style.display='none';
+  $('shell').classList.add('show');
+  startOrdersListener();startCatalogListeners();startReviewsListener();renderAll();updateOrderAlertButton();
+}
+async function login(){
+  if(!requireFirebase())return;
+  $('error').textContent='';
+  try{
+    const cred=await auth.signInWithEmailAndPassword($('user').value.trim(),$('pass').value);
+    if(!await verifyAdminUser(cred.user)){await auth.signOut();throw new Error('This account is not authorised as the pharmacy admin.');}
+    openAdminApp();
+  }catch(err){$('error').textContent=err.message}
+}
+if(firebaseReady){
+  auth.onAuthStateChanged(async user=>{
+    if(!user){adminAppStarted=false;$('shell').classList.remove('show');$('login').style.display='flex';return;}
+    try{
+      if(await verifyAdminUser(user))openAdminApp();
+      else{await auth.signOut();$('error').textContent='This account is not authorised as the pharmacy admin.';}
+    }catch(e){$('error').textContent='Could not restore the admin session: '+e.message;}
+  });
+}
 async function logout(){if(auth)await auth.signOut();location.reload()}async function resetAdminPassword(){if(!requireFirebase())return;const email=$('user').value.trim();if(!email)return alert('Enter the admin email first.');try{await auth.sendPasswordResetEmail(email);alert('A password-reset email was sent to '+email+'. Please check your inbox. (Because this email service is newly configured, the message may occasionally appear in your Spam or Junk folder.)')}catch(err){alert(err.message)}}
-function updateOrderAlertButton(){const b=$('orderAlertToggle');if(!b)return;if(!('Notification'in window)){b.textContent='Alerts unsupported';b.classList.add('denied');return}if(Notification.permission==='granted'){b.textContent='🔔 Order alerts on';b.classList.add('enabled');b.classList.remove('denied')}else if(Notification.permission==='denied'){b.textContent='🔕 Alerts blocked';b.classList.add('denied');b.classList.remove('enabled')}else{b.textContent='🔔 Enable alerts';b.classList.remove('enabled','denied')}}
-async function enableOrderNotifications(){if(!('Notification'in window))return alert('This browser does not support desktop notifications.');try{const result=await Notification.requestPermission();localStorage.setItem('nadineOrderAlerts',result==='granted'?'on':'off');updateOrderAlertButton();if(result==='granted')new Notification('Nadine Parapharm',{body:'New-order notifications are now enabled.'});else if(result==='denied')alert('Notifications are blocked. Enable them from the browser padlock icon beside the website address.')}catch(e){alert('Could not enable notifications: '+e.message)}}
-function playOrderSound(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const c=new C(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.setValueAtTime(880,c.currentTime);g.gain.setValueAtTime(.001,c.currentTime);g.gain.exponentialRampToValueAtTime(.18,c.currentTime+.02);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.45);o.start();o.stop(c.currentTime+.46)}catch(e){}}
+let orderAudioContext=null,orderAlarmTimer=null,orderAlarmActive=false,orderToastTimer=null,lastAnnouncedOrderId=null,ordersListenerReady=false;
+function updateOrderAlertButton(){const b=$('orderAlertToggle');if(!b)return;if(!('Notification'in window)){b.textContent='🔊 Sound alerts on';b.classList.add('enabled');return}if(Notification.permission==='granted'){b.textContent='🔔 Computer alerts on';b.classList.add('enabled');b.classList.remove('denied')}else if(Notification.permission==='denied'){b.textContent='🔊 Sound on · notifications blocked';b.classList.add('denied');b.classList.remove('enabled')}else{b.textContent='🔔 Enable computer alerts';b.classList.remove('enabled','denied')}}
+function unlockOrderAudio(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;if(!orderAudioContext)orderAudioContext=new C();if(orderAudioContext.state==='suspended')orderAudioContext.resume();const o=orderAudioContext.createOscillator(),g=orderAudioContext.createGain();g.gain.value=.00001;o.connect(g);g.connect(orderAudioContext.destination);o.start();o.stop(orderAudioContext.currentTime+.02);localStorage.setItem('nadineAudioUnlocked','yes')}catch(e){console.warn('Audio unlock failed',e)}}
+document.addEventListener('pointerdown',unlockOrderAudio,{once:true});
+async function enableOrderNotifications(){unlockOrderAudio();if(!('Notification'in window)){alert('Sound alerts are enabled. This browser does not support desktop messages.');return}try{const result=await Notification.requestPermission();localStorage.setItem('nadineOrderAlerts',result==='granted'?'on':'off');updateOrderAlertButton();if(result==='granted'){new Notification('Nadine Parapharm alerts enabled',{body:'You will receive a computer message and sound for every new order.'});playOrderSound()}else if(result==='denied')alert('Computer notifications are blocked. Click the padlock beside the website address → Notifications → Allow. Sound and the on-screen order message will still work while this page is open.')}catch(e){alert('Could not enable notifications: '+e.message)}}
+function playOrderSound(){try{unlockOrderAudio();const c=orderAudioContext;if(!c)return;const now=c.currentTime;[880,1175,880].forEach((freq,i)=>{const o=c.createOscillator(),g=c.createGain();o.type='sine';o.frequency.value=freq;o.connect(g);g.connect(c.destination);const t=now+i*.28;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.28,t+.025);g.gain.exponentialRampToValueAtTime(.0001,t+.22);o.start(t);o.stop(t+.24)})}catch(e){console.warn('Order sound failed',e)}}
+function startOrderAlarm(){stopOrderAlarm();orderAlarmActive=true;playOrderSound();orderAlarmTimer=setInterval(()=>{if(orderAlarmActive)playOrderSound()},3500)}
+function stopOrderAlarm(){orderAlarmActive=false;if(orderAlarmTimer){clearInterval(orderAlarmTimer);orderAlarmTimer=null}}
 let originalPageTitle=document.title,titleFlashTimer=null;
-function flashOrderTitle(){clearInterval(titleFlashTimer);let flip=false,count=0;titleFlashTimer=setInterval(()=>{document.title=flip?'🔔 NEW ORDER!':originalPageTitle;flip=!flip;if(++count>=12){clearInterval(titleFlashTimer);document.title=originalPageTitle}},700)}
-function announceNewOrder(o){lastAnnouncedOrderId=o.id||o.docId;const itemCount=(o.items||[]).reduce((t,i)=>t+Number(i.qty||i.quantity||0),0),customer=o.customer||o.customerName||o.name||'A customer',orderNo=o.orderNumber||o.id||o.docId,text=`${customer} placed order #${orderNo} · ${itemCount} item${itemCount===1?'':'s'} · ${money(o.total||0)}`;if($('orderToastText'))$('orderToastText').textContent=text;if($('orderToast')){$('orderToast').classList.add('show');$('orderToast').style.display='block'}clearTimeout(orderToastTimer);orderToastTimer=setTimeout(closeOrderToast,30000);playOrderSound();flashOrderTitle();try{if(navigator.vibrate)navigator.vibrate([250,120,250])}catch(e){}if('Notification'in window&&Notification.permission==='granted'){try{const n=new Notification('🔔 New Nadine Parapharm order',{body:text,tag:'order-'+lastAnnouncedOrderId,renotify:true,requireInteraction:true});n.onclick=()=>{window.focus();showPanel('orders');n.close()}}catch(e){console.warn('Desktop notification failed',e)}}}
-function closeOrderToast(){if($('orderToast'))$('orderToast').classList.remove('show')}
+function flashOrderTitle(){clearInterval(titleFlashTimer);let flip=false;titleFlashTimer=setInterval(()=>{document.title=flip?'🔔 NEW ORDER — OPEN ADMIN':originalPageTitle;flip=!flip},650)}
+function announceNewOrder(o){lastAnnouncedOrderId=o.id||o.docId;const itemCount=(o.items||[]).reduce((t,i)=>t+Number(i.qty||i.quantity||0),0),customer=o.customer||o.customerName||o.name||'A customer',orderNo=o.orderNumber||o.id||o.docId,text=`${customer} placed order #${orderNo} · ${itemCount} item${itemCount===1?'':'s'} · ${money(o.total||0)}`;if($('orderToastText'))$('orderToastText').textContent=text;if($('orderToast')){$('orderToast').classList.add('show');$('orderToast').style.display='block'}clearTimeout(orderToastTimer);startOrderAlarm();flashOrderTitle();try{if(navigator.vibrate)navigator.vibrate([300,150,300,150,500])}catch(e){}if('Notification'in window&&Notification.permission==='granted'){try{const n=new Notification('NEW ORDER — Nadine Parapharm',{body:text,tag:'order-'+lastAnnouncedOrderId,renotify:true,requireInteraction:true,icon:'assets/favicon-96.png'});n.onclick=()=>{window.focus();showPanel('orders');stopOrderAlarm();clearInterval(titleFlashTimer);document.title=originalPageTitle;n.close()}}catch(e){console.warn('Desktop notification failed',e)}}}
+function closeOrderToast(){stopOrderAlarm();clearInterval(titleFlashTimer);document.title=originalPageTitle;if($('orderToast'))$('orderToast').classList.remove('show')}
 function openLatestNewOrder(){closeOrderToast();showPanel('orders');window.scrollTo({top:0,behavior:'smooth'})}
 let deepLinkedOrderHandled=false;
 function openDeepLinkedOrder(){
@@ -126,7 +169,7 @@ function openDeepLinkedOrder(){
   setTimeout(()=>openReceipt(found.id||found.docId),120);
   try{history.replaceState({},document.title,window.location.pathname)}catch(e){}
 }
-function startOrdersListener(){if(unsubscribeOrders)unsubscribeOrders();ordersListenerReady=false;const seenKey='nadineSeenOrderIds';let seenIds=new Set();try{seenIds=new Set(JSON.parse(localStorage.getItem(seenKey)||'[]'))}catch(e){}unsubscribeOrders=db.collection('orders').orderBy('createdAt','desc').onSnapshot(snap=>{const current=snap.docs.map(d=>({docId:d.id,...d.data()}));const genuinelyNew=current.filter(o=>ordersListenerReady&&!seenIds.has(o.docId));orders=current;current.forEach(o=>seenIds.add(o.docId));try{localStorage.setItem(seenKey,JSON.stringify(Array.from(seenIds).slice(-500)))}catch(e){}renderAll();openDeepLinkedOrder();if(genuinelyNew.length){genuinelyNew.reverse().forEach(announceNewOrder)}ordersListenerReady=true},err=>{$('error').textContent='Orders could not load: '+err.message})}
+function startOrdersListener(){if(unsubscribeOrders)unsubscribeOrders();ordersListenerReady=false;unsubscribeOrders=db.collection('orders').orderBy('createdAt','desc').onSnapshot(snap=>{const newlyAdded=ordersListenerReady?snap.docChanges().filter(c=>c.type==='added').map(c=>({docId:c.doc.id,...c.doc.data()})):[];orders=snap.docs.map(d=>({docId:d.id,...d.data()}));renderAll();openDeepLinkedOrder();newlyAdded.reverse().forEach(announceNewOrder);ordersListenerReady=true},err=>{$('error').textContent='Orders could not load: '+err.message})}
 function startReviewsListener(){if(unsubscribeReviews)unsubscribeReviews();unsubscribeReviews=db.collection('reviews').orderBy('createdAt','desc').onSnapshot(snap=>{reviews=snap.docs.map(d=>({id:d.id,...d.data()}));renderAdminReviews();updateReviewBadge()},e=>console.warn('Reviews could not load',e))}
 function updateReviewBadge(){const n=reviews.filter(r=>r.status==='pending').length,el=$('reviewNavCount');if(!el)return;el.textContent=n;el.style.display=n?'inline-flex':'none'}
 function reviewDate(v){try{return v?.toDate?v.toDate():new Date(v)}catch(e){return null}}
