@@ -75,13 +75,27 @@ service cloud.firestore {
     }
 
     match /reviews/{reviewId} {
-      allow read: if true;
+      allow read: if isAdmin()
+        || resource.data.status == 'approved'
+        || (signedIn() && resource.data.customerUid == request.auth.uid);
       allow create: if signedIn()
         && request.resource.data.customerUid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.verifiedPurchase == true
+        && request.resource.data.orderId is string
+        && exists(/databases/$(database)/documents/orders/$(request.resource.data.orderId))
+        && get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.customerUid == request.auth.uid
+        && get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.status in ['Delivered', 'Collected']
         && request.resource.data.rating is number
-        && request.resource.data.rating >= 1
-        && request.resource.data.rating <= 5;
-      allow update, delete: if isAdmin() || (signedIn() && resource.data.customerUid == request.auth.uid);
+        && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && request.resource.data.deliveryRating is number
+        && request.resource.data.deliveryRating >= 1 && request.resource.data.deliveryRating <= 5
+        && request.resource.data.packagingRating is number
+        && request.resource.data.packagingRating >= 1 && request.resource.data.packagingRating <= 5
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 3
+        && request.resource.data.text.size() <= 500;
+      allow update, delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {
