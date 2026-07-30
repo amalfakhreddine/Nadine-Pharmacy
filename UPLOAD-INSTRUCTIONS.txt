@@ -1,0 +1,34 @@
+NADINE PARAPHARM — FIXED DEPLOYMENT
+
+1. Delete the duplicate/old admin files from GitHub, especially files named like:
+   admin(13).html, admin(16).html, admin-fixed.html, or any second admin file.
+
+2. Upload the CONTENTS of this folder to the ROOT of the GitHub repository.
+   The important exact filenames are:
+   index.html
+   admin.html
+   firebase-config.js
+   firestore.rules
+   firebase.json
+   .firebaserc
+   manifest.webmanifest
+   vercel.json
+
+3. Firebase step (MANDATORY for orders):
+   Firebase Console > Firestore Database > Rules
+   Replace the existing rules with firestore.rules from this package and press Publish.
+   Uploading to GitHub/Vercel does NOT publish Firestore rules.
+
+4. Wait until the newest Vercel deployment says Ready.
+
+5. Open the customer website and /admin, then press Ctrl + F5 on both.
+
+6. Test while signed in as a customer:
+   - place one delivery order
+   - place one pickup order
+   Both should appear live in /admin.
+
+Admin Firebase email:
+nadinepharmacy@gmail.com
+
+This package uses one customer page and one admin page only.
