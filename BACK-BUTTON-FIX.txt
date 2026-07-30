@@ -1,0 +1,6 @@
+Browser Back / Forward fix
+
+This version adds real browser history entries for the cart, wishlist, checkout, orders, product details, sign-in, profile, and policy screens.
+
+Upload every file in this folder to the GitHub repository, wait for Vercel to redeploy, then press Ctrl+F5 on the customer website.
+No Firestore rule change is needed for this update.
