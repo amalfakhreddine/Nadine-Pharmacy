@@ -11,22 +11,33 @@ firebase.initializeApp({
 });
 
 const messaging=firebase.messaging();
-messaging.onBackgroundMessage(payload=>{
+
+messaging.onBackgroundMessage((payload)=>{
   const d=payload.data||{};
   return self.registration.showNotification(d.title||'NEW ORDER — Nadine Parapharm',{
     body:d.body||'A new customer order was received.',
-    icon:'/assets/favicon-96.png',badge:'/assets/favicon-96.png',
-    tag:'order-'+(d.orderId||Date.now()),renotify:true,requireInteraction:true,
-    vibrate:[300,150,300,150,500],data:{url:d.url||'/admin'}
+    icon:'/icon-192.png',
+    badge:'/badge-96.png',
+    tag:d.type==='test'?'nadine-test':'order-'+(d.orderId||Date.now()),
+    renotify:true,
+    requireInteraction:true,
+    vibrate:[300,150,300,150,500],
+    data:{url:d.url||'/admin'}
   });
 });
 
-self.addEventListener('notificationclick',event=>{
+self.addEventListener('notificationclick',(event)=>{
   event.notification.close();
   const target=(event.notification.data&&event.notification.data.url)||'/admin';
   event.waitUntil((async()=>{
     const list=await clients.matchAll({type:'window',includeUncontrolled:true});
-    for(const client of list){if('focus'in client){await client.focus();if('navigate'in client)await client.navigate(target);return}}
+    for(const client of list){
+      if('focus' in client){
+        await client.focus();
+        if('navigate' in client)await client.navigate(target);
+        return;
+      }
+    }
     if(clients.openWindow)return clients.openWindow(target);
   })());
 });

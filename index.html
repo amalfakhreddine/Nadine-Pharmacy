@@ -150,6 +150,12 @@ async function placeOrder(){
       stockAdjusted:false
     };
     await db.collection('orders').doc(orderId).set(order);
+    // Free notification backend hosted on Vercel: sends the pharmacy email and
+    // background push alerts. The order remains successful even if delivery is delayed.
+    try{
+      const idToken=await user.getIdToken();
+      fetch('/api/notify-order',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+idToken},body:JSON.stringify({orderId})}).catch(e=>console.warn('Order notification request failed',e));
+    }catch(e){console.warn('Could not start external order notifications',e)}
     cart=[];saveCart();$('checkoutForm').reset();$('rxPreview').style.display='none';$('rxPreview').innerHTML='';closeModal('checkoutModal');
     $('successText').innerHTML=`Your order number is <b>${orderId}</b>. ${order.fulfillment==='pickup'?'Pickup order':'Delivery order'} total: <b>${money(order.total)}</b>. It will appear instantly in the pharmacy admin.`;
     $('successModal').classList.add('show');setPageLocked(true);

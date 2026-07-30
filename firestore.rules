@@ -45,7 +45,6 @@ service cloud.firestore {
     match /settings/adminAccess {
       allow read, create, update, delete: if primaryAdmin();
     }
-
     match /settings/{documentId} {
       allow read: if documentId != 'adminAccess';
       allow create, update, delete: if isAdmin();
@@ -57,10 +56,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-
     match /adminPushTokens/{tokenDoc} {
-      // Admin devices may register their own FCM token. Explicit rules avoid
-      // evaluating request.resource during reads/deletes, where it is absent.
       allow read: if isAdmin();
       allow create: if isAdmin()
         && request.resource.data.uid == request.auth.uid
@@ -71,7 +67,8 @@ service cloud.firestore {
         && resource.data.uid == request.auth.uid
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.email == request.auth.token.email
-        && request.resource.data.token is string;
+        && request.resource.data.token is string
+        && request.resource.data.active == true;
       allow delete: if isAdmin() && resource.data.uid == request.auth.uid;
     }
 
