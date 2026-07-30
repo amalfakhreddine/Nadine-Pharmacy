@@ -131,6 +131,7 @@ async function placeOrder(){
     const order={
       id:orderId,
       createdAt:new Date().toISOString(),
+      createdAtServer:firebase.firestore.FieldValue.serverTimestamp(),
       customerUid:user.uid,
       customerEmail:user.email||'',
       customer:name,

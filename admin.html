@@ -308,7 +308,31 @@ function openDeepLinkedOrder(){
   setTimeout(()=>openReceipt(found.id||found.docId),120);
   try{history.replaceState({},document.title,window.location.pathname)}catch(e){}
 }
-function startOrdersListener(){if(unsubscribeOrders)unsubscribeOrders();unsubscribeOrders=db.collection('orders').orderBy('createdAt','desc').onSnapshot(snap=>{orders=snap.docs.map(d=>({docId:d.id,...d.data()}));renderAll();openDeepLinkedOrder()},err=>{$('error').textContent='Orders could not load: '+err.message})}
+function orderSortTime(value){
+  try{
+    if(value&&typeof value.toMillis==='function')return value.toMillis();
+    if(value&&typeof value.toDate==='function')return value.toDate().getTime();
+    const t=new Date(value||0).getTime();
+    return Number.isFinite(t)?t:0;
+  }catch(e){return 0}
+}
+function startOrdersListener(){
+  if(unsubscribeOrders)unsubscribeOrders();
+  // Listen to the complete collection without orderBy. This avoids the whole
+  // listener failing when an older order has no createdAt field or uses a
+  // different timestamp format. Orders are sorted safely in the browser.
+  unsubscribeOrders=db.collection('orders').onSnapshot(snap=>{
+    orders=snap.docs.map(d=>({docId:d.id,...d.data()}))
+      .sort((a,b)=>orderSortTime(b.createdAt)-orderSortTime(a.createdAt));
+    $('error').textContent='';
+    renderAll();
+    openDeepLinkedOrder();
+  },err=>{
+    console.error('Orders listener failed',err);
+    $('error').textContent='Orders could not load: '+err.message;
+    alert('Admin could not read orders from Firebase: '+err.message+' Make sure the included firestore.rules were published in Firebase Console.');
+  });
+}
 function startReviewsListener(){if(unsubscribeReviews)unsubscribeReviews();unsubscribeReviews=db.collection('reviews').orderBy('createdAt','desc').onSnapshot(snap=>{reviews=snap.docs.map(d=>({id:d.id,...d.data()}));renderAdminReviews();updateReviewBadge()},e=>console.warn('Reviews could not load',e))}
 function updateReviewBadge(){const n=reviews.filter(r=>r.status==='pending').length,el=$('reviewNavCount');if(!el)return;el.textContent=n;el.style.display=n?'inline-flex':'none'}
 function reviewDate(v){try{return v?.toDate?v.toDate():new Date(v)}catch(e){return null}}
