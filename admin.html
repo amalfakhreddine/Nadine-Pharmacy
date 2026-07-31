@@ -444,6 +444,91 @@ async function writeAudit(action,product,before={}){try{await db.collection('aud
 async function saveProduct(){let name=$('aName').value.trim(),brand=$('aBrand').value.trim(),genericName=$('aGeneric').value.trim(),barcode=$('aBarcode').value.trim(),cat=$('aCat').value,price=Number($('aPrice').value),stock=Number($('aStock').value),meta=$('aMeta').value.trim(),expiry=$('aExpiry').value,prescriptionRequired=$('aPrescription').checked;if(!name||!Number.isFinite(price)||!Number.isFinite(stock))return alert('Add a product name, price and quantity.');$('saveBtn').disabled=true;$('saveBtn').textContent='Saving...';try{let old=editingId?products.find(x=>String(x.id)===String(editingId))||{}:{},newImages=await readFiles($('aImages').files),images=[...editingImages,...newImages].slice(0,3),data={name,brand,genericName,activeIngredient:genericName,barcode,cat,price,stock:Math.max(0,Math.floor(stock)),meta,expiry,images,prescriptionRequired,active:true,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};let ref;if(editingId){ref=db.collection('products').doc(String(editingId));await ref.set(data,{merge:true})}else{ref=await db.collection('products').add({...data,createdAt:firebase.firestore.FieldValue.serverTimestamp()})}await writeAudit(editingId?'Product edited':'Product created',{id:ref.id||editingId,...data},old);resetForm();await refreshExpiryAlerts();renderProductsTable();alert('Product saved and published on the customer website.')}catch(err){alert('Could not save product: '+err.message)}finally{$('saveBtn').disabled=false;$('saveBtn').textContent=editingId?'Save changes':'Add product'}}
 function editProduct(id){let p=products.find(x=>String(x.id)===String(id));if(!p)return;editingId=id;editingImages=[...(p.images||[])];$('aName').value=p.name;$('aBrand').value=p.brand||'';$('aGeneric').value=p.genericName||p.activeIngredient||'';$('aBarcode').value=p.barcode||'';$('aCat').value=p.cat;$('aPrice').value=p.price;$('aStock').value=p.stock;$('aMeta').value=p.meta||'';$('aExpiry').value=(typeof getProductExpiryValue(p)==='string'?getProductExpiryValue(p):'');$('aPrescription').checked=!!p.prescriptionRequired;$('imagePreview').innerHTML=editingImages.map(i=>`<img src="${i}">`).join('');$('formTitle').textContent='Edit product';$('saveBtn').textContent='Save changes';showPanel('products');scrollTo({top:0,behavior:'smooth'})}
 async function deleteProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;if(!confirm(`Move ${p.name} to Trash? You can undo this for 30 seconds or restore it later from Trash.`))return;try{await db.collection('products').doc(String(id)).set({active:false,deletedAt:firebase.firestore.FieldValue.serverTimestamp(),deletedBy:auth.currentUser?.email||''},{merge:true});await writeAudit('Product moved to Trash',p,p);showUndoSnackbar(id,p.name)}catch(err){alert('Could not move product to Trash: '+err.message)}}
+
+function renderTrash(){
+  const rows=$('trashRows'), empty=$('trashEmpty'), badge=$('trashNavCount');
+  if(!rows||!empty)return;
+  const arr=[...trashProducts].sort((a,b)=>{
+    const ad=orderDate(a.deletedAt), bd=orderDate(b.deletedAt);
+    return (bd?.getTime()||0)-(ad?.getTime()||0);
+  });
+  if(badge){
+    badge.textContent=String(arr.length);
+    badge.style.display=arr.length?'inline-grid':'none';
+  }
+  empty.style.display=arr.length?'none':'block';
+  rows.innerHTML=arr.map(p=>`<tr>
+    <td><div class="trash-name"><div><b>${esc(p.name||'Unnamed product')}</b><div class="muted" style="font-size:12px">${esc(p.brand||p.meta||'')}</div></div></div></td>
+    <td>${esc(p.cat||'—')}</td>
+    <td>${money(p.price||0)}</td>
+    <td>${Number(p.stock||0)}</td>
+    <td>${formatDateTime(p.deletedAt)}</td>
+    <td><div class="row-actions">
+      <button class="secondary" onclick="restoreProduct('${p.id}')">Restore</button>
+      <button class="danger" onclick="permanentlyDeleteProduct('${p.id}')">Delete forever</button>
+    </div></td>
+  </tr>`).join('');
+}
+
+function showUndoSnackbar(id,name){
+  undoProductId=String(id);
+  const bar=$('undoSnackbar'), msg=$('undoMessage'), count=$('undoCountdown');
+  if(!bar)return;
+  if(undoTimer)clearInterval(undoTimer);
+  let seconds=30;
+  if(msg)msg.textContent=`${name||'Product'} moved to Trash.`;
+  if(count)count.textContent=String(seconds);
+  bar.classList.add('show');
+  undoTimer=setInterval(()=>{
+    seconds-=1;
+    if(count)count.textContent=String(Math.max(0,seconds));
+    if(seconds<=0){
+      clearInterval(undoTimer);
+      undoTimer=null;
+      undoProductId=null;
+      bar.classList.remove('show');
+    }
+  },1000);
+}
+
+async function undoLastDelete(){
+  if(!undoProductId)return;
+  const id=undoProductId;
+  undoProductId=null;
+  if(undoTimer){clearInterval(undoTimer);undoTimer=null}
+  $('undoSnackbar')?.classList.remove('show');
+  await restoreProduct(id,false);
+}
+
+async function restoreProduct(id,ask=true){
+  const p=trashProducts.find(x=>String(x.id)===String(id));
+  if(!p)return;
+  if(ask&&!confirm(`Restore ${p.name||'this product'} to the customer website?`))return;
+  try{
+    await db.collection('products').doc(String(id)).set({
+      active:true,
+      deletedAt:firebase.firestore.FieldValue.delete(),
+      deletedBy:firebase.firestore.FieldValue.delete(),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true});
+    await writeAudit('Product restored from Trash',{...p,active:true},p);
+  }catch(err){
+    alert('Could not restore product: '+err.message);
+  }
+}
+
+async function permanentlyDeleteProduct(id){
+  const p=trashProducts.find(x=>String(x.id)===String(id));
+  if(!p)return;
+  if(!confirm(`Permanently delete ${p.name||'this product'}? This cannot be undone.`))return;
+  try{
+    await db.collection('products').doc(String(id)).delete();
+    await writeAudit('Product permanently deleted',p,p);
+  }catch(err){
+    alert('Could not permanently delete product: '+err.message);
+  }
+}
+
 function resetForm(){editingId=null;editingImages=[];['aName','aBrand','aGeneric','aBarcode','aPrice','aStock','aMeta','aExpiry'].forEach(id=>{if($(id))$(id).value=''});$('aPrescription').checked=false;$('aImages').value='';$('imagePreview').innerHTML='';$('formTitle').textContent='Add product';$('saveBtn').textContent='Add product';renderCategoryOptions()}
 async function scanBarcodeFile(input){const file=input.files?.[0];if(!file)return;if(!('BarcodeDetector'in window)){alert('Automatic barcode scanning is not supported in this browser. Type the barcode manually.');return}try{const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});const bmp=await createImageBitmap(file);const codes=await detector.detect(bmp);if(!codes.length)throw new Error('No barcode found. Try a clearer close-up photo.');$('aBarcode').value=codes[0].rawValue;alert('Barcode detected: '+codes[0].rawValue)}catch(e){alert(e.message)}finally{input.value=''}}
 function orderDate(value){if(!value)return null;if(value&&typeof value.toDate==='function')return value.toDate();const d=new Date(value);return Number.isNaN(d.getTime())?null:d}
