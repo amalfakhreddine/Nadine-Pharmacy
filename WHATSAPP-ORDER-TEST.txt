@@ -1,0 +1,11 @@
+WHATSAPP ORDER TEST
+
+The customer order is saved to Firestore first. After a successful save, WhatsApp opens with a prepared order message addressed to the test number 96181744966. The customer must press Send in WhatsApp.
+
+To change the recipient later, open index.html and search for:
+PHARMACY_WHATSAPP_NUMBER
+
+Replace only the digits inside the quotes. Use country code and number with no + sign or spaces.
+Example: 96181123456
+
+No Firestore rules change is needed for this feature.
