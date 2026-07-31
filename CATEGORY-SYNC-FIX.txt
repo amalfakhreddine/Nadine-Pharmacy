@@ -1,0 +1,9 @@
+CATEGORY AND PRODUCT LIVE SYNC FIX
+
+- Categories now use Firestore as the only source of truth.
+- Deleted categories no longer return after refresh.
+- Removing a category automatically clears that category from its products.
+- Deleted products no longer return when the product collection becomes empty.
+- Customer and admin pages both update from live Firestore listeners.
+
+Deploy all files to GitHub/Vercel. No Firestore rules change is required if settings/catalog and products already allow admin writes and public reads.
