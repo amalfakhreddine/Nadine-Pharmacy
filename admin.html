@@ -143,7 +143,7 @@ function openCustomerSite(){const url=new URL('index.html',window.location.href)
 let adminAppStarted=false;
 const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
 const PRIMARY_ADMIN_UID='pDtFVJRVIDhVWQTm0XWnbgFwfyG2';
-async function verifyAdminUser(user){
+function verifyAdminUser(user){
   if(!user)return false;
   const email=String(user.email||'').trim().toLowerCase();
   return user.uid===PRIMARY_ADMIN_UID || email===PRIMARY_ADMIN_EMAIL;
@@ -170,44 +170,45 @@ function lockAdminApp(message=''){
   $('login').style.display='grid';
   if(message)$('error').textContent=message;
 }
-async function refreshAdminAuth(user){
-  // Force a fresh Firebase ID token before Firestore listeners are created.
-  // This prevents Firestore from opening the orders listener with a stale or
-  // anonymous token immediately after sign-in.
-  const tokenResult=await user.getIdTokenResult(true);
-  const tokenEmail=String(tokenResult?.claims?.email||user.email||'').trim().toLowerCase();
-  if(user.uid!==PRIMARY_ADMIN_UID && tokenEmail!==PRIMARY_ADMIN_EMAIL)throw new Error('This account is not authorised as the pharmacy admin.');
-  return user;
-}
 async function login(){
   if(!requireFirebase())return;
   $('error').textContent='';
+  const button=document.querySelector('#login .primary');
+  if(button){button.disabled=true;button.textContent='Signing in…';}
   try{
+    // Set persistence before signing in so Firebase does not briefly lose the session.
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     const cred=await auth.signInWithEmailAndPassword($('user').value.trim(),$('pass').value);
-    if(!await verifyAdminUser(cred.user)){await auth.signOut();throw new Error('This account is not authorised as the pharmacy admin.');}
-    // Do not start the dashboard here. onAuthStateChanged below will refresh
-    // the token first and then start all Firestore listeners exactly once.
-    await refreshAdminAuth(cred.user);
-  }catch(err){$('error').textContent=err.message}
+    if(!verifyAdminUser(cred.user)){
+      await auth.signOut();
+      throw new Error('This account is not authorised as the pharmacy admin.');
+    }
+    // Open immediately. Firestore receives the signed-in token automatically.
+    openAdminApp(cred.user);
+  }catch(err){
+    console.error('Admin sign-in failed',err);
+    lockAdminApp(err?.message||'Could not sign in. Please try again.');
+  }finally{
+    if(button){button.disabled=false;button.textContent='Sign in';}
+  }
 }
 if(firebaseReady){
-  auth.onAuthStateChanged(async user=>{
-    // Never reveal any dashboard content until authentication and authorisation both pass.
-    if(!user){lockAdminApp();return;}
-    try{
-      const allowed=await verifyAdminUser(user);
-      if(allowed){
-        await refreshAdminAuth(user);
-        openAdminApp(user);
-      }else{
-        await auth.signOut();
-        lockAdminApp('This account is not authorised as the pharmacy admin.');
-      }
-    }catch(e){
-      await auth.signOut().catch(()=>{});
-      lockAdminApp(e?.message||'Could not verify admin access. Please sign in again.');
-      console.error(e);
+  auth.onAuthStateChanged(user=>{
+    document.body.classList.remove('auth-checking');
+    if(!user){
+      lockAdminApp();
+      return;
     }
+    if(verifyAdminUser(user)){
+      openAdminApp(user);
+      return;
+    }
+    // Only sign out accounts that are genuinely not authorised.
+    auth.signOut().finally(()=>lockAdminApp('This account is not authorised as the pharmacy admin.'));
+  },err=>{
+    console.error('Firebase auth-state error',err);
+    // Do not sign the admin out because of a temporary token/network error.
+    lockAdminApp(err?.message||'Could not restore the admin session. Please sign in again.');
   });
 }else{
   lockAdminApp('Firebase is not configured.');
