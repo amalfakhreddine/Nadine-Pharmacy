@@ -1,0 +1,4 @@
+WhatsApp direct redirect enabled
+
+After an order is saved successfully, the customer is redirected immediately to WhatsApp with the order message already prepared for +961 71 979 118.
+The customer only needs to press Send inside WhatsApp.
