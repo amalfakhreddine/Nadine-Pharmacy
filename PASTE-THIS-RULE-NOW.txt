@@ -1,0 +1,2 @@
+Paste the full contents of firestore.rules into Firebase Console > Firestore Database > Rules and click Publish.
+Then upload every file in this folder to GitHub, replacing the old files.

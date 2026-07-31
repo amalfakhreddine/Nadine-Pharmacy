@@ -142,13 +142,11 @@ let products=[],trashProducts=[],categories=[...defaultCategories],orders=[],edi
 function openCustomerSite(){const url=new URL('index.html',window.location.href);window.open(url.href,'_blank')}const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
 let adminAppStarted=false;
 const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
+const PRIMARY_ADMIN_UID='pDtFVJRVIDhVWQTm0XWnbgFwfyG2';
 async function verifyAdminUser(user){
   if(!user)return false;
   const email=String(user.email||'').trim().toLowerCase();
-  const configuredPrimary=String(window.NADINE_ADMIN_EMAIL||PRIMARY_ADMIN_EMAIL).trim().toLowerCase();
-  // Stable production gate: Firebase must authenticate the user and the
-  // authenticated email must be the pharmacy's primary admin account.
-  return email===PRIMARY_ADMIN_EMAIL && email===configuredPrimary;
+  return user.uid===PRIMARY_ADMIN_UID || email===PRIMARY_ADMIN_EMAIL;
 }
 function openAdminApp(user){
   const activeUser=user||auth?.currentUser;
@@ -178,7 +176,7 @@ async function refreshAdminAuth(user){
   // anonymous token immediately after sign-in.
   const tokenResult=await user.getIdTokenResult(true);
   const tokenEmail=String(tokenResult?.claims?.email||user.email||'').trim().toLowerCase();
-  if(tokenEmail!==PRIMARY_ADMIN_EMAIL)throw new Error('This account is not authorised as the pharmacy admin.');
+  if(user.uid!==PRIMARY_ADMIN_UID && tokenEmail!==PRIMARY_ADMIN_EMAIL)throw new Error('This account is not authorised as the pharmacy admin.');
   return user;
 }
 async function login(){
