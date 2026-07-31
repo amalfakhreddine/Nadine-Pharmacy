@@ -66,7 +66,7 @@ Customer profile details are stored in Firestore at `profiles/{customer UID}`. T
 - Pickup card opens the parapharmacy Google Maps location.
 - Consultation and floating/footer WhatsApp links use +961 71 979 118.
 - Pharmacist verification card filters the shop to prescription-required products.
-- Opening hours are Monday–Saturday 8:30 AM–9:00 PM; Sunday closed.
+- Opening hours are Monday - Sunday 8:30 AM–9:00 PM; Sunday: same opening hours.
 
 ## Prescription product filter
 The customer shop category filters include a dedicated **Prescription required** option. It displays only products marked as prescription-required by the parapharmacy and shows a pharmacist-verification notice.
