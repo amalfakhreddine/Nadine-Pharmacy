@@ -452,41 +452,13 @@ function toggleAdminMenu(){const open=!document.body.classList.contains('menu-op
 function closeAdminMenu(){document.body.classList.remove('menu-open');const btn=$('menuToggle');if(btn){btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-label','Open navigation menu')}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAdminMenu()});
 function showPanel(name){
-  document.querySelectorAll('.panel').forEach(panel=>{
-    panel.classList.remove('active');
-    panel.style.display='none';
-  });
-
-  document.querySelectorAll('[onclick^="showPanel("]').forEach(button=>{
-    button.classList.remove('active');
-  });
-
+  document.querySelectorAll('.panel').forEach(panel=>panel.classList.remove('active'));
+  document.querySelectorAll('.sidebar button, nav button, .nav button').forEach(button=>button.classList.remove('active'));
   const panel=document.getElementById('panel-'+name);
-  if(panel){
-    panel.classList.add('active');
-    panel.style.display='block';
-  }
-
-  const navButton=[...document.querySelectorAll('[onclick^="showPanel("]')]
-    .find(button=>button.getAttribute('onclick')===`showPanel('${name}')`);
+  if(panel)panel.classList.add('active');
+  const navButton=document.querySelector(`[onclick="showPanel('${name}')"]`);
   if(navButton)navButton.classList.add('active');
-
-  if(name==='softpharm' && typeof loadSoftPharmSettings==='function'){
-    loadSoftPharmSettings();
-  }
-
-  if(name==='history' && typeof renderHistory==='function'){
-    renderHistory();
-  }
-
-  if(name==='customers' && typeof renderCustomers==='function'){
-    renderCustomers();
-  }
-
-  if(name==='products' && typeof renderProductsTable==='function'){
-    renderProductsTable();
-  }
-
+  if(name==='softpharm')loadSoftPharmSettings();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function renderAll(){renderStats();renderCategoryOptions();renderProductsTable();renderOrders();renderHistoryFilters();renderHistory();renderCategories();renderShopSettings();renderTrash();renderCustomers();renderGreeting();loadSoftPharmSettings();setTimeout(renderDashboardCharts,30)}
@@ -684,7 +656,7 @@ function salesByProduct(){const map={};orders.filter(o=>o.status!=='Cancelled').
 function renderDashboardCharts(){if(typeof Chart==='undefined')return;const labels=[],counts=[];for(let n=6;n>=0;n--){const d=new Date();d.setDate(d.getDate()-n);labels.push(d.toLocaleDateString(undefined,{weekday:'short'}));counts.push(orders.filter(o=>{const x=orderDate(o.createdAt);return x&&x.toDateString()===d.toDateString()}).length)}if($('ordersChart')){destroyChart('ordersChart');charts.ordersChart=new Chart($('ordersChart'),{type:'line',data:{labels,datasets:[{label:'Orders',data:counts,tension:.35,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}})}const top=salesByProduct().slice(0,6);if($('topProductsChart')){destroyChart('topProductsChart');charts.topProductsChart=new Chart($('topProductsChart'),{type:'bar',data:{labels:top.map(x=>x.name),datasets:[{label:'Units sold',data:top.map(x=>x.qty)}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}})}}
 function renderAnalytics(){const valid=orders.filter(o=>o.status!=='Cancelled'),now=new Date(),month=valid.filter(o=>{const d=orderDate(o.createdAt);return d&&d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear()}),avg=valid.length?valid.reduce((s,o)=>s+Number(o.total||0),0)/valid.length:0,repeat=new Set(valid.map(o=>o.customerUid).filter(Boolean)).size;$('reportKpis').innerHTML=`<div class="report-kpi"><span class="muted">Orders this month</span><b>${month.length}</b></div><div class="report-kpi"><span class="muted">Revenue this month</span><b>${money(month.reduce((s,o)=>s+Number(o.total||0),0))}</b></div><div class="report-kpi"><span class="muted">Average order</span><b>${money(avg)}</b></div><div class="report-kpi"><span class="muted">Unique customers</span><b>${repeat}</b></div>`;const best=salesByProduct();$('bestSellerRows').innerHTML=best.slice(0,15).map(x=>`<tr><td><b>${esc(x.name)}</b></td><td>${x.qty}</td><td>${money(x.value)}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">No sales yet.</td></tr>';if(typeof Chart==='undefined')return;const labels=[],rev=[];for(let n=29;n>=0;n--){const d=new Date();d.setDate(d.getDate()-n);labels.push(d.toLocaleDateString(undefined,{month:'short',day:'numeric'}));rev.push(valid.filter(o=>{const x=orderDate(o.createdAt);return x&&x.toDateString()===d.toDateString()}).reduce((s,o)=>s+Number(o.total||0),0))}destroyChart('revenueChart');charts.revenueChart=new Chart($('revenueChart'),{type:'line',data:{labels,datasets:[{label:'Revenue',data:rev,tension:.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});const statuses={};orders.forEach(o=>statuses[o.status||'Unknown']=(statuses[o.status||'Unknown']||0)+1);destroyChart('statusChart');charts.statusChart=new Chart($('statusChart'),{type:'doughnut',data:{labels:Object.keys(statuses),datasets:[{data:Object.values(statuses)}]},options:{responsive:true,maintainAspectRatio:false}})}
 function customerDataset(){const map={};profiles.forEach(p=>{map[p.id]={id:p.id,name:p.fullName||p.name||'Customer',email:p.email||'',phone:p.phone||'',orders:0,spent:0,last:null,profile:p}});orders.forEach(o=>{const k=o.customerUid||o.customerEmail||o.phone||o.customer||o.docId;if(!map[k])map[k]={id:k,name:o.customer||'Customer',email:o.customerEmail||'',phone:o.phone||'',orders:0,spent:0,last:null,profile:{}};map[k].orders++;if(o.status!=='Cancelled')map[k].spent+=Number(o.total||0);const d=orderDate(o.createdAt);if(d&&(!map[k].last||d>map[k].last))map[k].last=d});return Object.values(map)}
-function renderCustomers(){if(!$('customerList'))return;let arr=customerDataset(),q=($('customerSearch')?.value||'').toLowerCase(),sort=$('customerSort')?.value||'recent';arr=arr.filter(c=>[c.name,c.email,c.phone].join(' ').toLowerCase().includes(q));if(sort==='orders')arr.sort((a,b)=>b.orders-a.orders);else if(sort==='spent')arr.sort((a,b)=>b.spent-a.spent);else if(sort==='name')arr.sort((a,b)=>a.name.localeCompare(b.name));else arr.sort((a,b)=>(b.last||0)-(a.last||0));$('customerList').innerHTML=arr.length?arr.map(c=>`<div class="customer-card"><div style="display:flex;gap:12px;align-items:center"><div class="customer-avatar">${esc((c.name[0]||'C').toUpperCase())}</div><div><b>${esc(c.name)}</b><div class="muted">${esc(c.email||'No email')}</div><div class="muted">${esc(c.phone||'No phone')}</div></div></div><div><span class="muted">Last order</span><b style="display:block">${c.last?c.last.toLocaleDateString():'—'}</b></div><div><span class="muted">Orders</span><b style="display:block">${c.orders}</b></div><div><span class="muted">Spent</span><b style="display:block">${money(c.spent)}</b></div><button class="secondary" type="button" onclick="viewCustomerOrders(${JSON.stringify(c.email||c.phone||c.name)})">View orders</button></div>`).join(''):'<div class="muted">No customers match.</div>'}
+function renderCustomers(){if(!$('customerList'))return;let arr=customerDataset(),q=($('customerSearch')?.value||'').toLowerCase(),sort=$('customerSort')?.value||'recent';arr=arr.filter(c=>[c.name,c.email,c.phone].join(' ').toLowerCase().includes(q));if(sort==='orders')arr.sort((a,b)=>b.orders-a.orders);else if(sort==='spent')arr.sort((a,b)=>b.spent-a.spent);else if(sort==='name')arr.sort((a,b)=>a.name.localeCompare(b.name));else arr.sort((a,b)=>(b.last||0)-(a.last||0));$('customerList').innerHTML=arr.length?arr.map(c=>`<div class="customer-card"><div style="display:flex;gap:12px;align-items:center"><div class="customer-avatar">${esc((c.name[0]||'C').toUpperCase())}</div><div><b>${esc(c.name)}</b><div class="muted">${esc(c.email||'No email')}</div><div class="muted">${esc(c.phone||'No phone')}</div></div></div><div><span class="muted">Last order</span><b style="display:block">${c.last?c.last.toLocaleDateString():'—'}</b></div><div><span class="muted">Orders</span><b style="display:block">${c.orders}</b></div><div><span class="muted">Spent</span><b style="display:block">${money(c.spent)}</b></div><button type="button" class="secondary" onclick="viewCustomerOrders('${encodeURIComponent(c.email||c.phone||c.name||'')}')">View orders</button></div>`).join(''):'<div class="muted">No customers match.</div>'}
 async function loadAuditLogs(){if(!$('activityList'))return;$('activityList').innerHTML='<div class="muted">Loading…</div>';try{const s=await db.collection('auditLogs').orderBy('createdAt','desc').limit(200).get();auditLogs=s.docs.map(d=>({id:d.id,...d.data()}));$('activityList').innerHTML=auditLogs.length?auditLogs.map(x=>`<div class="activity-row"><div><b>${formatDateTime(x.createdAt)}</b></div><div><b>${esc(x.action||'Inventory update')}</b><div class="muted">${esc(x.productName||'Product')}</div></div><div class="muted">${esc(x.adminEmail||'Admin')}</div></div>`).join(''):'<div class="muted">No activity recorded yet. New product changes will appear here.</div>'}catch(e){$('activityList').innerHTML='<div class="error">Could not load activity: '+esc(e.message)+'</div>'}}
 function sheetDownload(rows,name){if(typeof XLSX==='undefined')return alert('Export library did not load. Check your internet connection and try again.');const ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Report');XLSX.writeFile(wb,name)}
 function exportOrdersXlsx(){sheetDownload(orders.map(o=>({Order:o.id||o.docId,Date:formatDateTime(o.createdAt),Customer:o.customer||'',Email:o.customerEmail||'',Phone:o.phone||'',Fulfillment:o.fulfillment||'',Status:o.status||'',Payment:o.payment||'',Total:Number(o.total||0),Items:(o.items||[]).map(i=>`${i.qty||i.quantity||0}x ${i.name}`).join('; ')})),'nadine-parapharm-orders.xlsx')}
@@ -772,9 +744,10 @@ function syncSoftPharmNow(){
 
 
 
-function viewCustomerOrders(searchValue){
-  const input=document.getElementById('historySearch');
-  if(input)input.value=String(searchValue||'');
+function viewCustomerOrders(encodedValue){
+  const value=decodeURIComponent(String(encodedValue||''));
+  const search=document.getElementById('historySearch');
+  if(search)search.value=value;
   showPanel('history');
   if(typeof renderHistory==='function')renderHistory();
 }
