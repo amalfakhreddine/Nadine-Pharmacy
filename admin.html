@@ -144,15 +144,11 @@ let adminAppStarted=false;
 const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
 async function verifyAdminUser(user){
   if(!user)return false;
-  // Force a fresh Firebase ID token before any Firestore listener starts.
-  // Firestore rules read the email from this token, not from the form field.
-  const tokenResult=await user.getIdTokenResult(true);
-  const accountEmail=String(user.email||'').trim().toLowerCase();
-  const tokenEmail=String(tokenResult.claims.email||'').trim().toLowerCase();
+  const email=String(user.email||'').trim().toLowerCase();
   const configuredPrimary=String(window.NADINE_ADMIN_EMAIL||PRIMARY_ADMIN_EMAIL).trim().toLowerCase();
-  return accountEmail===PRIMARY_ADMIN_EMAIL
-    && tokenEmail===PRIMARY_ADMIN_EMAIL
-    && configuredPrimary===PRIMARY_ADMIN_EMAIL;
+  // Stable production gate: Firebase must authenticate the user and the
+  // authenticated email must be the pharmacy's primary admin account.
+  return email===PRIMARY_ADMIN_EMAIL && email===configuredPrimary;
 }
 function openAdminApp(user){
   const activeUser=user||auth?.currentUser;
@@ -176,14 +172,24 @@ function lockAdminApp(message=''){
   $('login').style.display='grid';
   if(message)$('error').textContent=message;
 }
+async function refreshAdminAuth(user){
+  // Force a fresh Firebase ID token before Firestore listeners are created.
+  // This prevents Firestore from opening the orders listener with a stale or
+  // anonymous token immediately after sign-in.
+  const tokenResult=await user.getIdTokenResult(true);
+  const tokenEmail=String(tokenResult?.claims?.email||user.email||'').trim().toLowerCase();
+  if(tokenEmail!==PRIMARY_ADMIN_EMAIL)throw new Error('This account is not authorised as the pharmacy admin.');
+  return user;
+}
 async function login(){
   if(!requireFirebase())return;
   $('error').textContent='';
   try{
     const cred=await auth.signInWithEmailAndPassword($('user').value.trim(),$('pass').value);
     if(!await verifyAdminUser(cred.user)){await auth.signOut();throw new Error('This account is not authorised as the pharmacy admin.');}
-    // onAuthStateChanged opens the dashboard only after the refreshed token is ready.
-    $('error').textContent='Signing in…';
+    // Do not start the dashboard here. onAuthStateChanged below will refresh
+    // the token first and then start all Firestore listeners exactly once.
+    await refreshAdminAuth(cred.user);
   }catch(err){$('error').textContent=err.message}
 }
 if(firebaseReady){
@@ -193,6 +199,7 @@ if(firebaseReady){
     try{
       const allowed=await verifyAdminUser(user);
       if(allowed){
+        await refreshAdminAuth(user);
         openAdminApp(user);
       }else{
         await auth.signOut();
@@ -200,7 +207,7 @@ if(firebaseReady){
       }
     }catch(e){
       await auth.signOut().catch(()=>{});
-      lockAdminApp('Could not verify admin access. Please sign in again.');
+      lockAdminApp(e?.message||'Could not verify admin access. Please sign in again.');
       console.error(e);
     }
   });
