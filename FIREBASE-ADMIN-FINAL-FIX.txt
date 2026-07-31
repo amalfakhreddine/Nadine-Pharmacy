@@ -1,0 +1,3 @@
+IMPORTANT: Publish the included firestore.rules in Firebase Console > Firestore > Rules.
+Then upload all website files, wait for Vercel, close every admin tab, reopen /admin.html, and sign in again.
+This version waits for a freshly issued Firebase ID token before starting any Firestore listener.

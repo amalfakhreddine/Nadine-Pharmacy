@@ -144,11 +144,15 @@ let adminAppStarted=false;
 const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
 async function verifyAdminUser(user){
   if(!user)return false;
-  const email=String(user.email||'').trim().toLowerCase();
+  // Force a fresh Firebase ID token before any Firestore listener starts.
+  // Firestore rules read the email from this token, not from the form field.
+  const tokenResult=await user.getIdTokenResult(true);
+  const accountEmail=String(user.email||'').trim().toLowerCase();
+  const tokenEmail=String(tokenResult.claims.email||'').trim().toLowerCase();
   const configuredPrimary=String(window.NADINE_ADMIN_EMAIL||PRIMARY_ADMIN_EMAIL).trim().toLowerCase();
-  // Stable production gate: Firebase must authenticate the user and the
-  // authenticated email must be the pharmacy's primary admin account.
-  return email===PRIMARY_ADMIN_EMAIL && email===configuredPrimary;
+  return accountEmail===PRIMARY_ADMIN_EMAIL
+    && tokenEmail===PRIMARY_ADMIN_EMAIL
+    && configuredPrimary===PRIMARY_ADMIN_EMAIL;
 }
 function openAdminApp(user){
   const activeUser=user||auth?.currentUser;
@@ -178,7 +182,8 @@ async function login(){
   try{
     const cred=await auth.signInWithEmailAndPassword($('user').value.trim(),$('pass').value);
     if(!await verifyAdminUser(cred.user)){await auth.signOut();throw new Error('This account is not authorised as the pharmacy admin.');}
-    openAdminApp(cred.user);
+    // onAuthStateChanged opens the dashboard only after the refreshed token is ready.
+    $('error').textContent='Signing in…';
   }catch(err){$('error').textContent=err.message}
 }
 if(firebaseReady){
@@ -188,7 +193,6 @@ if(firebaseReady){
     try{
       const allowed=await verifyAdminUser(user);
       if(allowed){
-        await user.getIdToken(true);
         openAdminApp(user);
       }else{
         await auth.signOut();
