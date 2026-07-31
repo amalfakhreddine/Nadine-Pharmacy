@@ -10,7 +10,7 @@ This version uses three notification methods:
 
 Open the Vercel project → **Settings → Environment Variables** and add:
 
-- `FIREBASE_PROJECT_ID` = `nadine-parapharmacy`
+- `FIREBASE_PROJECT_ID` = `nadine-pharmacy`
 - `FIREBASE_CLIENT_EMAIL` = the `client_email` from a Firebase service-account JSON file
 - `FIREBASE_PRIVATE_KEY` = the complete `private_key` from that JSON file
 - `GMAIL_USER` = `nadinepharmacy6@gmail.com`

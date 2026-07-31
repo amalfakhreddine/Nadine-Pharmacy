@@ -12,7 +12,7 @@ This project now contains the missing `functions/` backend.
 ```bash
 npm install -g firebase-tools
 firebase login
-firebase use nadine-parapharmacy
+firebase use nadine-pharmacy
 cd functions
 npm install
 cd ..

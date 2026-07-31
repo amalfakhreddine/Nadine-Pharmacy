@@ -13,7 +13,7 @@ firebase login
 cd functions
 npm install
 cd ..
-firebase use nadine-parapharmacy
+firebase use nadine-pharmacy
 firebase deploy --only firestore:rules,functions
 ```
 
