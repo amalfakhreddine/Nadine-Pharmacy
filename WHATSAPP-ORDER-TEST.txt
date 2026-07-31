@@ -1,6 +1,6 @@
 WHATSAPP ORDER TEST
 
-The customer order is saved to Firestore first. After a successful save, WhatsApp opens with a prepared order message addressed to the test number 96181744966. The customer must press Send in WhatsApp.
+The customer order is saved to Firestore first. After a successful save, WhatsApp opens with a prepared order message addressed to the pharmacy number 96171979118. The customer must press Send in WhatsApp.
 
 To change the recipient later, open index.html and search for:
 PHARMACY_WHATSAPP_NUMBER
