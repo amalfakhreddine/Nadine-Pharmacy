@@ -1,0 +1,20 @@
+{
+  "firebaseProjectId": "nadine-pharmacy",
+  "syncDirection": "SoftPharm -> Firebase only",
+  "defaultIntervalMinutes": 10,
+  "matchKey": "barcode",
+  "unknownCategories": "do_not_publish",
+  "deleteBehavior": "hide_product",
+  "allowedWebsiteCategories": [
+    "Skincare",
+    "Cosmetics",
+    "Baby Care",
+    "Hair Care",
+    "Oral Care",
+    "Vitamins",
+    "Supplements",
+    "Personal Care",
+    "Hygiene",
+    "Wellness"
+  ]
+}
