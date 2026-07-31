@@ -14,7 +14,7 @@ In Firebase Console open **Extensions**, search for **Trigger Email**, and insta
 Use these values during installation:
 
 - **Email documents collection:** `mail`
-- **Default FROM address:** an address controlled by the pharmacy
+- **Default FROM address:** an address controlled by the parapharmacy
 - Configure the SMTP provider requested by the extension. Gmail can be used with an app password, but a transactional provider is usually more reliable.
 
 Firebase may require the project to use the Blaze billing plan for extensions. The email provider can also charge according to its own plan.

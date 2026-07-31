@@ -11,4 +11,4 @@ This build fixes the mismatch between the admin website and Firestore rules.
 5. Wait for Vercel to finish deploying.
 6. Open `/admin`, press **Ctrl + F5**, and sign in with `nadinepharmacy@gmail.com`.
 
-The primary pharmacy account still requires its correct Firebase password. Other administrators must exist in Firebase Authentication and be listed in `settings/adminAccess`.
+The primary parapharmacy account still requires its correct Firebase password. Other administrators must exist in Firebase Authentication and be listed in `settings/adminAccess`.

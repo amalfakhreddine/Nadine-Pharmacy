@@ -1,5 +1,5 @@
 {
-  "name": "nadine-pharmacy-notifications",
+  "name": "nadine-parapharmacy-notifications",
   "private": true,
   "version": "1.0.0",
   "engines": { "node": "22.x" },

@@ -1,4 +1,4 @@
-# Nadine Pharmacy complete upgrade
+# Nadine Parapharmacy complete upgrade
 
 This version uses Firebase Authentication and Cloud Firestore for customers, products, categories, stock and orders.
 

@@ -1,4 +1,4 @@
-NADINE PHARMACY — ORDER DISPLAY FIX
+NADINE PARAPHARMACY — ORDER DISPLAY FIX
 
 What was fixed:
 - The admin now listens to the complete Firestore orders collection without orderBy.

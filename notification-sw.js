@@ -3,9 +3,9 @@ importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-com
 
 firebase.initializeApp({
   apiKey:'AIzaSyAxdijMU916B4aJ_2OKYxgkoSN-juLmQW8',
-  authDomain:'nadine-pharmacy.firebaseapp.com',
-  projectId:'nadine-pharmacy',
-  storageBucket:'nadine-pharmacy.firebasestorage.app',
+  authDomain:'nadine-parapharmacy.firebaseapp.com',
+  projectId:'nadine-parapharmacy',
+  storageBucket:'nadine-parapharmacy.firebasestorage.app',
   messagingSenderId:'618108519430',
   appId:'1:618108519430:web:0aae00e0a0683712aa2f87'
 });

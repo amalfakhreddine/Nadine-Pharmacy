@@ -10,7 +10,7 @@ This version uses three notification methods:
 
 Open the Vercel project → **Settings → Environment Variables** and add:
 
-- `FIREBASE_PROJECT_ID` = `nadine-pharmacy`
+- `FIREBASE_PROJECT_ID` = `nadine-parapharmacy`
 - `FIREBASE_CLIENT_EMAIL` = the `client_email` from a Firebase service-account JSON file
 - `FIREBASE_PRIVATE_KEY` = the complete `private_key` from that JSON file
 - `GMAIL_USER` = `nadinepharmacy6@gmail.com`
@@ -25,7 +25,7 @@ Open the downloaded JSON only to copy `client_email` and `private_key` into Verc
 
 ## Get the Gmail app password
 
-On the pharmacy Google account, turn on 2-Step Verification, then create an App Password. Copy the 16-character value into `GMAIL_APP_PASSWORD` in Vercel. Do not put the normal Gmail password in the website.
+On the parapharmacy Google account, turn on 2-Step Verification, then create an App Password. Copy the 16-character value into `GMAIL_APP_PASSWORD` in Vercel. Do not put the normal Gmail password in the website.
 
 ## Publish
 

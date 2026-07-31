@@ -13,12 +13,12 @@ firebase login
 cd functions
 npm install
 cd ..
-firebase use nadine-pharmacy
+firebase use nadine-parapharmacy
 firebase deploy --only firestore:rules,functions
 ```
 
 5. Push all website files to GitHub/Vercel.
-6. Open the official HTTPS `/admin` page, sign in as the pharmacy admin, press **Enable background alerts**, and choose **Allow**. Repeat once on every phone/computer that should receive orders.
+6. Open the official HTTPS `/admin` page, sign in as the parapharmacy admin, press **Enable background alerts**, and choose **Allow**. Repeat once on every phone/computer that should receive orders.
 7. Place a customer test order while the admin tab is closed.
 
 ## Important platform behavior

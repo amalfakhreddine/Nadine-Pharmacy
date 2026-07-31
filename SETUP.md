@@ -1,4 +1,4 @@
-# Nadine Pharmacy – Setup
+# Nadine Parapharmacy – Setup
 
 ## 1. Firebase Authentication
 In Firebase Console → Authentication → Sign-in method:

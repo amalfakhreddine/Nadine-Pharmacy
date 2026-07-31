@@ -1,6 +1,6 @@
 # Admin login repair
 
-This repair keeps the pharmacy's primary Firebase admin account permanently recognized:
+This repair keeps the parapharmacy's primary Firebase admin account permanently recognized:
 
 - nadinepharmacy@gmail.com
 

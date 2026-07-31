@@ -1,19 +1,19 @@
-# Nadine Pharmacy password-reset email template
+# Nadine Parapharmacy password-reset email template
 
 Firebase Console → Authentication → Templates → Password reset → Edit.
 
 Use the following content. Keep Firebase's generated reset link placeholder unchanged.
 
 ## Sender name
-Nadine Pharmacy
+Nadine Parapharmacy
 
 ## Subject
-Reset your Nadine Pharmacy password
+Reset your Nadine Parapharmacy password
 
 ## Message
 Hello,
 
-We received a request to reset the password for your Nadine Pharmacy account.
+We received a request to reset the password for your Nadine Parapharmacy account.
 
 Click the button below to create a new password:
 
@@ -21,11 +21,11 @@ Click the button below to create a new password:
 
 If you did not request this change, you can safely ignore this email. Your password will remain unchanged.
 
-For assistance, contact Nadine Pharmacy at +961 6 440 470.
+For assistance, contact Nadine Parapharmacy at +961 6 440 470.
 
 Rue Maarad, Tripoli, Lebanon
 
-Nadine Pharmacy
+Nadine Parapharmacy
 
 ## Website confirmation message
 The customer and admin websites now display this message after a reset email is sent:
