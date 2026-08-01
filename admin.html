@@ -393,7 +393,7 @@ function openDeepLinkedOrder(){
   deepLinkedOrderHandled=true;
   showPanel(['Delivered','Collected','Cancelled'].includes(found.status)?'history':'orders');
   setTimeout(()=>openReceipt(found.id||found.docId),120);
-  try{history.replaceState({},document.title,window.location.pathname)}catch(e){}
+  try{const active=document.querySelector('.panel.active')?.id?.replace('panel-','')||'orders';history.replaceState({adminPanel:active},document.title,window.location.pathname+'#admin-panel='+encodeURIComponent(active))}catch(e){}
 }
 function orderSortTime(value){
   try{
@@ -433,16 +433,37 @@ async function saveCategories(next,nextDeleted=deletedCategories){const clean=no
 function toggleAdminMenu(){const open=!document.body.classList.contains('menu-open');document.body.classList.toggle('menu-open',open);const btn=$('menuToggle');if(btn){btn.setAttribute('aria-expanded',String(open));btn.setAttribute('aria-label',open?'Close navigation menu':'Open navigation menu')}}
 function closeAdminMenu(){document.body.classList.remove('menu-open');const btn=$('menuToggle');if(btn){btn.setAttribute('aria-expanded','false');btn.setAttribute('aria-label','Open navigation menu')}}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeAdminMenu()});
-function showPanel(name){
-  document.querySelectorAll('.panel').forEach(panel=>panel.classList.remove('active'));
-  document.querySelectorAll('.sidebar button, nav button, .nav button').forEach(button=>button.classList.remove('active'));
+function adminPanelFromUrl(){
+  const match=String(window.location.hash||'').match(/^#admin-panel=([a-z0-9_-]+)$/i);
+  return match?decodeURIComponent(match[1]):null;
+}
+function adminPanelUrl(name){
+  return window.location.pathname+window.location.search+'#admin-panel='+encodeURIComponent(name);
+}
+function showPanel(name,options={}){
   const panel=document.getElementById('panel-'+name);
-  if(panel)panel.classList.add('active');
+  if(!panel)return;
+  const current=document.querySelector('.panel.active')?.id?.replace('panel-','')||null;
+  document.querySelectorAll('.panel').forEach(item=>item.classList.remove('active'));
+  document.querySelectorAll('.sidebar button, nav button, .nav button').forEach(button=>button.classList.remove('active'));
+  panel.classList.add('active');
   const navButton=document.querySelector(`[onclick="showPanel('${name}')"]`);
   if(navButton)navButton.classList.add('active');
   if(name==='softpharm')prepareSoftPharmImporter();
-  window.scrollTo({top:0,behavior:'smooth'});
+  if(options.history!==false&&current!==name){
+    try{history.pushState({adminPanel:name},document.title,adminPanelUrl(name))}catch(e){}
+  }
+  window.scrollTo({top:0,behavior:options.smooth===false?'auto':'smooth'});
 }
+window.addEventListener('popstate',event=>{
+  const name=event.state?.adminPanel||adminPanelFromUrl()||'dashboard';
+  showPanel(name,{history:false,smooth:false});
+});
+(function initializeAdminHistory(){
+  const initial=adminPanelFromUrl()||document.querySelector('.panel.active')?.id?.replace('panel-','')||'dashboard';
+  try{history.replaceState({adminPanel:initial},document.title,adminPanelUrl(initial))}catch(e){}
+  if(initial!=='dashboard')setTimeout(()=>showPanel(initial,{history:false,smooth:false}),0);
+})();
 function renderAll(){renderStats();renderCategoryOptions();renderProductsTable();renderOrders();renderHistoryFilters();renderHistory();renderCategories();renderShopSettings();renderTrash();renderCustomers();renderGreeting();prepareSoftPharmImporter();setTimeout(renderDashboardCharts,30)}
 function renderStats(){const today=new Date();today.setHours(0,0,0,0);let unread=orders.filter(o=>o.unread).length,todayOrders=orders.filter(o=>{const d=orderDate(o.createdAt);return d&&d>=today}),todayRevenue=todayOrders.filter(o=>o.status!=='Cancelled').reduce((s,o)=>s+Number(o.total||0),0),revenue=orders.filter(o=>o.status!=='Cancelled').reduce((s,o)=>s+Number(o.total||0),0);$('stats').innerHTML=`<div class="stat">Products<b>${products.length}</b><span class="metric-note">${products.filter(p=>p.stock===0).length} sold out</span></div><div class="stat">Units in stock<b>${products.reduce((s,p)=>s+Number(p.stock||0),0)}</b></div><div class="stat">Low stock<b>${products.filter(p=>p.stock>0&&p.stock<=5).length}</b></div><div class="stat">New orders<b>${unread}</b><span class="metric-note">${todayOrders.length} placed today</span></div><div class="stat">Today’s revenue<b>${money(todayRevenue)}</b><span class="metric-note">All-time ${money(revenue)}</span></div>`;$('notifBadge').textContent=unread;$('notifBadge').style.display=unread?'inline-grid':'none';const nav=$('newOrdersNav'),count=$('newOrdersNavCount');if(nav&&count){count.textContent=unread;count.style.display=unread?'inline-grid':'none';nav.classList.toggle('has-new',!!unread)}}
 function getProductExpiryValue(product){
