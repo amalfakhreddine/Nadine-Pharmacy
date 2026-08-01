@@ -167,8 +167,18 @@ body:has(#shell.show) #login{display:none!important;}
       <div class="import-toolbar">
         <input id="softpharmSearch" placeholder="Search product name, barcode, brand or category…" oninput="renderSoftPharmPreview()">
         <select id="softpharmDefaultCategory" title="Category used when the file category is missing or unknown"></select>
+        <button class="save" type="button" onclick="selectAllSoftPharm(true)">Select all products</button>
+        <button class="secondary" type="button" onclick="selectAllSoftPharm(false)">Clear all</button>
         <button class="secondary" type="button" onclick="selectVisibleSoftPharm(true)">Select visible</button>
         <button class="secondary" type="button" onclick="selectVisibleSoftPharm(false)">Clear visible</button>
+      </div>
+
+      <div class="import-category-picker">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+          <div><b>Quick select by category</b><div class="note">Click a category to select all its products. Click it again to clear that category.</div></div>
+          <span class="note" id="softpharmCategoryCount"></span>
+        </div>
+        <div id="softpharmCategoryButtons" class="row-actions" style="margin-top:12px;flex-wrap:wrap"></div>
       </div>
 
       <div class="table-wrap">
@@ -183,7 +193,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Safe manual import:</b> medicines stay out unless you personally tick them. Existing products are matched by barcode first, then by name. Their images and descriptions are kept while price and stock are updated.</div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or select complete categories, then untick any medicines before importing. Nothing is uploaded until you press “Import selected products”. Existing products keep their images and descriptions while price and stock are updated.</div>
     </div>
   </div>
 </section>
@@ -730,9 +740,30 @@ function renderSoftPharmPreview(){
   $('importRowsFound').textContent=String(softpharmRows.length);
   $('importSelectedCount').textContent=String(softpharmSelected.size);
   $('importExistingCount').textContent=String(softpharmRows.filter(getExistingImportProduct).length);
+  renderSoftPharmCategoryButtons();
 }
 function toggleSoftPharmRow(key,checked){if(checked)softpharmSelected.add(String(key));else softpharmSelected.delete(String(key));renderSoftPharmPreview()}
 function selectVisibleSoftPharm(checked){filteredSoftPharmRows().forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
+function selectAllSoftPharm(checked){softpharmRows.forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
+function softpharmCategoryLabel(row){return cleanImportText(row.category)||'Uncategorised'}
+function toggleSoftPharmCategory(encodedCategory){
+  const category=decodeURIComponent(String(encodedCategory||''));
+  const rows=softpharmRows.filter(r=>softpharmCategoryLabel(r)===category);
+  const allSelected=rows.length&&rows.every(r=>softpharmSelected.has(r.key));
+  rows.forEach(r=>allSelected?softpharmSelected.delete(r.key):softpharmSelected.add(r.key));
+  renderSoftPharmPreview();
+}
+function renderSoftPharmCategoryButtons(){
+  const wrap=$('softpharmCategoryButtons');if(!wrap)return;
+  const grouped={};
+  softpharmRows.forEach(r=>{const c=softpharmCategoryLabel(r);(grouped[c]||(grouped[c]=[])).push(r)});
+  const names=Object.keys(grouped).sort((a,b)=>a.localeCompare(b));
+  if($('softpharmCategoryCount'))$('softpharmCategoryCount').textContent=names.length+` categor${names.length===1?'y':'ies'} found`;
+  wrap.innerHTML=names.length?names.map(c=>{
+    const rows=grouped[c],count=rows.filter(r=>softpharmSelected.has(r.key)).length,all=count===rows.length;
+    return `<button type="button" class="${all?'save':'secondary'}" onclick="toggleSoftPharmCategory('${encodeURIComponent(c)}')">${all?'✓ ':''}${escapeHtml(c)} (${count}/${rows.length})</button>`;
+  }).join(''):'<span class="note">No categories were detected in this file.</span>';
+}
 function resolveImportCategory(row){
   const fallback=$('softpharmDefaultCategory')?.value||'';
   const fileCat=categories.find(c=>normalizeImportKey(c)===normalizeImportKey(row.category));
