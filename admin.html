@@ -745,7 +745,17 @@ async function importSelectedSoftPharmProducts(){
   if(!confirm(`Import ${selected.length} selected product(s)? Existing matches will have their price and stock updated.`))return;
   const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing…';
   try{
+    // Automatically create every category used by the selected Excel products.
+    // The shared catalog document is watched by both the admin and customer website,
+    // so new categories appear everywhere immediately after the import.
+    const selectedCategories=selected.map(resolveImportCategory).map(c=>cleanImportText(c)).filter(Boolean);
+    const mergedCategories=normalizeCategories([...categories,...selectedCategories]);
     let batch=db.batch(),ops=0,done=0,created=0,updated=0;
+    batch.set(db.collection('settings').doc('catalog'),{
+      categories:mergedCategories,
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true});
+    ops++;
     for(const row of selected){
       const existing=getExistingImportProduct(row);
       const ref=existing?db.collection('products').doc(String(existing.id)):db.collection('products').doc();
@@ -759,8 +769,8 @@ async function importSelectedSoftPharmProducts(){
       if(ops>=400){await batch.commit();batch=db.batch();ops=0;progress.textContent=`Imported ${done} of ${selected.length}…`}
     }
     if(ops)await batch.commit();
-    progress.textContent=`Done: ${created} new, ${updated} updated.`;
-    alert(`Import complete. ${created} new product(s) added and ${updated} existing product(s) updated.`);
+    progress.textContent=`Done: ${created} new, ${updated} updated. Categories added automatically.`;
+    alert(`Import complete. ${created} new product(s) added and ${updated} existing product(s) updated. Their categories were also added automatically to the admin and customer website.`);
     softpharmSelected.clear();renderSoftPharmPreview();
   }catch(err){console.error(err);progress.textContent='Import failed.';alert('Could not import products: '+err.message)}finally{btn.disabled=false}
 }
