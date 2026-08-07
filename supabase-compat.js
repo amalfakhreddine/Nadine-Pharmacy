@@ -151,16 +151,17 @@
         try{
           const {data}=await sb.auth.getSession();
           if(data?.session?.user)emit(data.session);
-          else if(event!=='INITIAL_SESSION')emit(null);
+          else emit(null);
         }catch(e){
-          if(event!=='INITIAL_SESSION')emit(null);
+          emit(null);
         }
       });
 
       // Resolve the already-restored session once on startup.
       sb.auth.getSession().then(({data})=>{
         if(data?.session?.user)emit(data.session);
-      }).catch(()=>{});
+        else emit(null);
+      }).catch(()=>emit(null));
 
       return()=>{active=false;listener.subscription.unsubscribe()}
     }

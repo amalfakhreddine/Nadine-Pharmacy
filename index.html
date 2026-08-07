@@ -429,5 +429,6 @@ function startCatalogListeners(){
 
 if(firebaseReady){auth.onAuthStateChanged(user=>{updateAuthButton(user);loadCartForUser(user);loadWishlistForUser(user);loadCustomerProfile(user)});startCatalogListeners();}
 else{loadCartForUser(null);loadWishlistForUser(null);}
-renderCats();renderProducts();renderRecent();updateCartCount();updateWishlistCount();updateAuthButton();
+renderCats();renderProducts();renderRecent();updateCartCount();updateWishlistCount();
+if(!firebaseReady)updateAuthButton();
 </script></body></html>
