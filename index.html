@@ -427,11 +427,7 @@ function startCatalogListeners(){
   };
 })();
 
-if(firebaseReady){auth.onAuthStateChanged(user=>{
-  if(user && (location.search.includes('code=') || location.hash.includes('access_token='))){
-    try{history.replaceState(history.state,document.title,location.origin+location.pathname)}catch(e){}
-  }
-  updateAuthButton(user);loadCartForUser(user);loadWishlistForUser(user);loadCustomerProfile(user)});startCatalogListeners();}
+if(firebaseReady){auth.onAuthStateChanged(user=>{updateAuthButton(user);loadCartForUser(user);loadWishlistForUser(user);loadCustomerProfile(user)});startCatalogListeners();}
 else{loadCartForUser(null);loadWishlistForUser(null);}
 renderCats();renderProducts();renderRecent();updateCartCount();updateWishlistCount();updateAuthButton();
 </script></body></html>

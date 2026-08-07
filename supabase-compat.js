@@ -109,7 +109,7 @@
     signOut:async()=>{const {error}=await sb.auth.signOut();if(error)throw error;auth.currentUser=null},
     sendPasswordResetEmail:async email=>{const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin});if(error)throw error},
     signInWithPopup:async()=>{
-      const redirectTo=location.origin+location.pathname;
+      const redirectTo=location.origin+'/';
       const {data,error}=await sb.auth.signInWithOAuth({
         provider:'google',
         options:{redirectTo,skipBrowserRedirect:true}
@@ -121,7 +121,49 @@
       // immediately close the sign-in modal before navigation begins.
       return new Promise(()=>{});
     },
-    onAuthStateChanged:cb=>{sb.auth.getSession().then(({data})=>{auth.currentUser=normalizeUser(data.session?.user);cb(auth.currentUser)});const {data}=sb.auth.onAuthStateChange((_e,s)=>{auth.currentUser=normalizeUser(s?.user);cb(auth.currentUser)});return()=>data.subscription.unsubscribe()}
+    onAuthStateChanged:cb=>{
+      let active=true;
+      let lastUid='__unset__';
+
+      const emit=session=>{
+        if(!active)return;
+        const user=normalizeUser(session?.user||null);
+        const uid=user?.uid||'';
+        // Do not emit the same auth state twice. This prevents the OAuth return
+        // sequence from briefly flipping a valid logged-in user back to null.
+        if(uid===lastUid)return;
+        lastUid=uid;
+        auth.currentUser=user;
+        cb(user);
+      };
+
+      const {data:listener}=sb.auth.onAuthStateChange(async(event,session)=>{
+        if(event==='SIGNED_OUT'){
+          emit(null);
+          return;
+        }
+        if(session?.user){
+          emit(session);
+          return;
+        }
+        // INITIAL_SESSION can transiently be empty while the OAuth code exchange
+        // is still completing. Confirm with getSession before treating it as logout.
+        try{
+          const {data}=await sb.auth.getSession();
+          if(data?.session?.user)emit(data.session);
+          else if(event!=='INITIAL_SESSION')emit(null);
+        }catch(e){
+          if(event!=='INITIAL_SESSION')emit(null);
+        }
+      });
+
+      // Resolve the already-restored session once on startup.
+      sb.auth.getSession().then(({data})=>{
+        if(data?.session?.user)emit(data.session);
+      }).catch(()=>{});
+
+      return()=>{active=false;listener.subscription.unsubscribe()}
+    }
   };
   window.firebase={
     apps:[{}],initializeApp:()=>({}),auth:()=>auth,firestore:()=>db,
