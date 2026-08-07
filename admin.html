@@ -191,7 +191,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. All imported products are placed in the <b>para</b> category. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3</span></div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. All imported products are placed in the <b>para</b> category. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode</span></div>
     </div>
   </div>
 </section>
@@ -630,6 +630,10 @@ async function changePassword(){let cur=$('currentPassword').value,newp=$('newPa
 let softpharmRows=[];
 let softpharmSelected=new Set();
 let softpharmVisibleLimit=100;
+let softpharmExistingByBarcode=new Map();
+let softpharmExistingByName=new Map();
+let softpharmExistingCount=0;
+let softpharmProcessingToken=0;
 
 function prepareSoftPharmImporter(){ return; }
 
@@ -652,12 +656,45 @@ function importNumber(value){
   return Number.isFinite(n)?n:0;
 }
 function cleanImportText(value){return String(value??'').trim().replace(/\s+/g,' ')}
-function getExistingImportProduct(row){
-  const barcode=normalizeImportKey(row.barcode);
-  if(barcode){const byBarcode=products.find(p=>normalizeImportKey(p.barcode)===barcode);if(byBarcode)return byBarcode}
-  const name=normalizeImportKey(row.name);
-  return name?products.find(p=>normalizeImportKey(p.name)===name):null;
+function buildSoftPharmExistingIndex(){
+  softpharmExistingByBarcode=new Map();
+  softpharmExistingByName=new Map();
+  for(const p of products||[]){
+    const barcode=normalizeImportKey(p?.barcode||'');
+    const name=normalizeImportKey(p?.name||'');
+    if(barcode&&!softpharmExistingByBarcode.has(barcode))softpharmExistingByBarcode.set(barcode,p);
+    if(name&&!softpharmExistingByName.has(name))softpharmExistingByName.set(name,p);
+  }
 }
+function getExistingImportProduct(row){
+  const barcode=normalizeImportKey(row?.barcode||'');
+  if(barcode&&softpharmExistingByBarcode.has(barcode))return softpharmExistingByBarcode.get(barcode);
+  const name=normalizeImportKey(row?.name||'');
+  return name?softpharmExistingByName.get(name)||null:null;
+}
+function recalcSoftPharmExistingCount(){
+  let count=0;
+  for(const row of softpharmRows)if(getExistingImportProduct(row))count++;
+  softpharmExistingCount=count;
+}
+function yieldToBrowser(){
+  return new Promise(resolve=>setTimeout(resolve,0));
+}
+async function mapSoftPharmRowsInChunks(rawRows,chunkSize=500){
+  const mapped=[];
+  for(let i=0;i<rawRows.length;i+=chunkSize){
+    const slice=rawRows.slice(i,i+chunkSize);
+    for(let j=0;j<slice.length;j++){
+      const row=mapSoftPharmRow(slice[j],i+j);
+      if(row.name)mapped.push(row);
+    }
+    const progress=$('softpharmFileName');
+    if(progress)progress.textContent=`Preparing products… ${Math.min(i+chunkSize,rawRows.length)} / ${rawRows.length}`;
+    await yieldToBrowser();
+  }
+  return mapped;
+}
+
 function mapSoftPharmRow(raw,index){
   const name=cleanImportText(importValue(raw,['product name','product','item name','item','description','designation','article','article name','name','libelle','libellé']));
   const barcode=cleanImportText(importValue(raw,['barcode','bar code','ean','upc','gtin','item barcode','product barcode','code barre']));
@@ -820,6 +857,11 @@ async function extractSoftPharmPdfRows(data){
       const raw=softPharmPriceListPdfRow(line)||(columns?softPharmPdfRowFromColumns(line,columns):softPharmPdfFallbackRow(line));
       if(raw&&cleanImportText(raw.name||raw.product||raw.description||''))rows.push(raw);
     }
+    if(pageNo%5===0||pageNo===pdf.numPages){
+      const progress=$('softpharmFileName');
+      if(progress)progress.textContent=`Reading PDF… page ${pageNo} / ${pdf.numPages} · ${rows.length} products found`;
+      await yieldToBrowser();
+    }
   }
   return rows;
 }
@@ -839,9 +881,11 @@ async function processSoftPharmFile(file){
       const sheet=workbook.Sheets[workbook.SheetNames[0]];
       rawRows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
     }
-    softpharmRows=rawRows.map(mapSoftPharmRow).filter(r=>r.name);
+    softpharmRows=await mapSoftPharmRowsInChunks(rawRows,500);
     softpharmSelected=new Set();
     softpharmVisibleLimit=100;
+    buildSoftPharmExistingIndex();
+    recalcSoftPharmExistingCount();
     $('softpharmFileName').textContent=file.name+' — '+softpharmRows.length+' product rows found';
     $('softpharmImportArea').style.display='block';
     $('softpharmSearch').value='';
@@ -881,19 +925,50 @@ function renderSoftPharmPreview(){
   }).join(''):'<tr><td colspan="6" class="muted">No matching products.</td></tr>';
   $('importRowsFound').textContent=String(softpharmRows.length);
   $('importSelectedCount').textContent=String(softpharmSelected.size);
-  $('importExistingCount').textContent=String(softpharmRows.filter(getExistingImportProduct).length);
+  $('importExistingCount').textContent=String(softpharmExistingCount);
   const more=$('softpharmLoadMoreWrap'),count=$('softpharmVisibleCount');
   if(more)more.style.display=filtered.length>rows.length?'block':'none';
   if(count)count.textContent=`Showing ${rows.length} of ${filtered.length} matching products`;
 }
 function showMoreSoftPharmRows(){softpharmVisibleLimit+=100;renderSoftPharmPreview()}
-function toggleSoftPharmRow(key,checked){if(checked)softpharmSelected.add(String(key));else softpharmSelected.delete(String(key));renderSoftPharmPreview()}
+function toggleSoftPharmRow(key,checked){
+  if(checked)softpharmSelected.add(String(key));else softpharmSelected.delete(String(key));
+  const count=$('importSelectedCount');if(count)count.textContent=String(softpharmSelected.size);
+}
 function selectVisibleSoftPharm(checked){filteredSoftPharmRows().slice(0,softpharmVisibleLimit).forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
-function selectAllSoftPharm(checked){softpharmRows.forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
+async function selectAllSoftPharm(checked){
+  const btn=$('importSelectedBtn');
+  const progress=$('importProgress');
+  if(btn)btn.disabled=true;
+  if(!checked){
+    softpharmSelected.clear();
+    if(progress)progress.textContent='Selection cleared.';
+    renderSoftPharmPreview();
+    if(btn)btn.disabled=false;
+    return;
+  }
+  softpharmSelected.clear();
+  const total=softpharmRows.length;
+  for(let i=0;i<total;i+=1000){
+    const end=Math.min(i+1000,total);
+    for(let j=i;j<end;j++)softpharmSelected.add(softpharmRows[j].key);
+    if(progress)progress.textContent=`Selecting… ${end} / ${total}`;
+    const count=$('importSelectedCount');if(count)count.textContent=String(softpharmSelected.size);
+    await yieldToBrowser();
+  }
+  if(progress)progress.textContent=`Selected ${total} products.`;
+  renderSoftPharmPreview();
+  if(btn)btn.disabled=false;
+}
 function resolveImportCategory(row){ return cleanImportText(row?.category||'') || 'para'; }
 async function importSelectedSoftPharmProducts(){
   if(!requireFirebase())return;
-  const selected=softpharmRows.filter(r=>softpharmSelected.has(r.key));
+  const selected=[];
+  for(let i=0;i<softpharmRows.length;i+=1000){
+    const end=Math.min(i+1000,softpharmRows.length);
+    for(let j=i;j<end;j++)if(softpharmSelected.has(softpharmRows[j].key))selected.push(softpharmRows[j]);
+    if(i&&i%5000===0)await yieldToBrowser();
+  }
   if(!selected.length)return alert('Select at least one product first.');
   if(!confirm(`Import ${selected.length} selected product(s)? Products with no category will automatically use para. Existing matches will be updated.`))return;
   const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing…';
@@ -916,16 +991,25 @@ async function importSelectedSoftPharmProducts(){
       };
       if(!existing){Object.assign(data,{genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});created++}else updated++;
       batch.set(ref,data,{merge:true});ops++;done++;
-      if(ops>=400){await batch.commit();batch=db.batch();ops=0;progress.textContent=`Imported ${done} of ${selected.length}…`}
+      if(ops>=300){
+        await batch.commit();
+        batch=db.batch();ops=0;
+        progress.textContent=`Imported ${done.toLocaleString()} / ${selected.length.toLocaleString()} products…`;
+        await yieldToBrowser();
+      }
     }
-    if(ops)await batch.commit();
+    if(ops){await batch.commit();await yieldToBrowser();}
     progress.textContent=`Done: ${created} new, ${updated} updated. Missing categories were set to para.`;
     alert(`Import complete. ${created} new product(s) added and ${updated} existing product(s) updated. Products without a category were set to para.`);
-    softpharmSelected.clear();renderSoftPharmPreview();
+    softpharmSelected.clear();
+    buildSoftPharmExistingIndex();
+    recalcSoftPharmExistingCount();
+    renderSoftPharmPreview();
   }catch(err){console.error(err);progress.textContent='Import failed.';alert('Could not import products: '+err.message)}finally{btn.disabled=false}
 }
 function clearSoftPharmImport(){
   softpharmRows=[];softpharmSelected.clear();softpharmVisibleLimit=100;
+  softpharmExistingByBarcode.clear();softpharmExistingByName.clear();softpharmExistingCount=0;
   if($('softpharmFile'))$('softpharmFile').value='';
   if($('softpharmFileName'))$('softpharmFileName').textContent='No file selected.';
   if($('softpharmImportArea'))$('softpharmImportArea').style.display='none';
