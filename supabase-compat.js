@@ -108,7 +108,19 @@
     createUserWithEmailAndPassword:async(email,password)=>{const {data,error}=await sb.auth.signUp({email,password});if(error)throw error;auth.currentUser=normalizeUser(data.user);return{user:auth.currentUser}},
     signOut:async()=>{const {error}=await sb.auth.signOut();if(error)throw error;auth.currentUser=null},
     sendPasswordResetEmail:async email=>{const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin});if(error)throw error},
-    signInWithPopup:async()=>{const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href}});if(error)throw error},
+    signInWithPopup:async()=>{
+      const redirectTo=location.origin+location.pathname;
+      const {data,error}=await sb.auth.signInWithOAuth({
+        provider:'google',
+        options:{redirectTo,skipBrowserRedirect:true}
+      });
+      if(error)throw error;
+      if(!data?.url)throw new Error('Google sign-in URL was not returned by Supabase.');
+      window.location.assign(data.url);
+      // Keep this promise pending so the old Firebase-style caller does not
+      // immediately close the sign-in modal before navigation begins.
+      return new Promise(()=>{});
+    },
     onAuthStateChanged:cb=>{sb.auth.getSession().then(({data})=>{auth.currentUser=normalizeUser(data.session?.user);cb(auth.currentUser)});const {data}=sb.auth.onAuthStateChange((_e,s)=>{auth.currentUser=normalizeUser(s?.user);cb(auth.currentUser)});return()=>data.subscription.unsubscribe()}
   };
   window.firebase={
