@@ -37,11 +37,20 @@
     }
     async update(data){const old=await this.get();if(!old.exists)throw new Error('Document not found');return this.set({...old.data(),...clean(data)})}
     async delete(){const {error}=await sb.from('app_documents').delete().eq('collection_name',this.col).eq('doc_id',this.id);if(error)throw error}
-    onSnapshot(ok,fail){
+    onSnapshot(optionsOrOk,okOrFail,maybeFail){
+      const ok=typeof optionsOrOk==='function'?optionsOrOk:okOrFail;
+      const fail=typeof optionsOrOk==='function'?okOrFail:maybeFail;
       let alive=true;
-      const load=()=>this.get().then(x=>alive&&ok(x)).catch(e=>fail&&fail(e));
+      const load=()=>this.get().then(x=>{
+        x.metadata={fromCache:false};
+        if(alive&&typeof ok==='function')ok(x);
+      }).catch(e=>{if(typeof fail==='function')fail(e)});
       load();
-      const ch=sb.channel('doc-'+this.col+'-'+this.id+'-'+Math.random()).on('postgres_changes',{event:'*',schema:'public',table:'app_documents',filter:`collection_name=eq.${this.col}`},p=>{if((p.new?.doc_id||p.old?.doc_id)===this.id)load()}).subscribe();
+      const ch=sb.channel('doc-'+this.col+'-'+this.id+'-'+Math.random())
+        .on('postgres_changes',
+          {event:'*',schema:'public',table:'app_documents',filter:`collection_name=eq.${this.col}`},
+          p=>{if((p.new?.doc_id||p.old?.doc_id)===this.id)load()}
+        ).subscribe();
       return()=>{alive=false;sb.removeChannel(ch)}
     }
   }
@@ -59,11 +68,21 @@
       if(this.lim!=null)rows=rows.slice(0,this.lim);
       return new SnapQuery(rows)
     }
-    onSnapshot(ok,fail){
+    onSnapshot(optionsOrOk,okOrFail,maybeFail){
+      const ok=typeof optionsOrOk==='function'?optionsOrOk:okOrFail;
+      const fail=typeof optionsOrOk==='function'?okOrFail:maybeFail;
       let alive=true,timer=null;
-      const load=()=>this.get().then(x=>alive&&ok(x)).catch(e=>fail&&fail(e));
+      const load=()=>this.get().then(x=>{
+        // Firebase snapshots expose metadata.fromCache. Supabase queries here are server-backed.
+        x.metadata={fromCache:false};
+        if(alive&&typeof ok==='function')ok(x);
+      }).catch(e=>{if(typeof fail==='function')fail(e)});
       load();
-      const ch=sb.channel('col-'+this.col+'-'+Math.random()).on('postgres_changes',{event:'*',schema:'public',table:'app_documents',filter:`collection_name=eq.${this.col}`},()=>{clearTimeout(timer);timer=setTimeout(load,50)}).subscribe();
+      const ch=sb.channel('col-'+this.col+'-'+Math.random())
+        .on('postgres_changes',
+          {event:'*',schema:'public',table:'app_documents',filter:`collection_name=eq.${this.col}`},
+          ()=>{clearTimeout(timer);timer=setTimeout(load,50)}
+        ).subscribe();
       return()=>{alive=false;clearTimeout(timer);sb.removeChannel(ch)}
     }
   }

@@ -315,6 +315,9 @@ function startCatalogListeners(){
     }
   );
 
+  // Immediate server-backed refresh as a fallback to guarantee admin/customer synchronization.
+  db.collection('products').get().then(applyCustomerProductSnapshot).catch(err=>console.error('Initial product refresh failed',err));
+
   unsubscribeCatalog=db.collection('settings').doc('catalog').onSnapshot(
     {includeMetadataChanges:true},
     doc=>{
