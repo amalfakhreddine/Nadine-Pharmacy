@@ -113,6 +113,8 @@ body:has(#shell.show) #login{display:none!important;}
 .import-drop{border:2px dashed #b9cec3;border-radius:16px;padding:24px;text-align:center;background:#f7fbf9;margin-bottom:16px}
 .import-drop input{display:none}
 .import-drop label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.import-drop.dragging{border-color:#4f8f70;background:#eef8f2;box-shadow:0 0 0 3px rgba(79,143,112,.10)}
+.import-load-more{text-align:center;padding:14px 0 4px}.import-load-more .note{display:block;margin-top:8px}
 .import-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}
 .import-toolbar input,.import-toolbar select{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
 .import-toolbar input{min-width:250px;flex:1}
@@ -144,17 +146,18 @@ body:has(#shell.show) #login{display:none!important;}
   <div class="heading">
     <div>
       <h1>Import from SoftPharm</h1>
-      <div class="muted">Upload a SoftPharm Excel or CSV export, choose the products you want, then import only those products.</div>
+      <div class="muted">Upload a SoftPharm Excel, CSV or PDF export, choose the products you want, then import only those products.</div>
     </div>
   </div>
 
   <div class="card">
-    <div class="import-drop">
+    <div class="import-drop" id="softpharmDropZone" ondragover="handleSoftPharmDragOver(event)" ondragleave="handleSoftPharmDragLeave(event)" ondrop="handleSoftPharmDrop(event)">
       <h2 style="margin-top:0">1. Choose the exported file</h2>
-      <p class="muted">Accepted formats: .xlsx, .xls and .csv. Nothing is imported until you select products and press the import button.</p>
-      <input id="softpharmFile" type="file" accept=".xlsx,.xls,.csv" onchange="loadSoftPharmFile(event)">
-      <label class="save" for="softpharmFile">Choose Excel or CSV file</label>
-      <div id="softpharmFileName" class="note" style="margin-top:10px">No file selected.</div>
+      <p class="muted">Drag & drop a SoftPharm file here, or choose it manually. Accepted formats: .xlsx, .xls, .csv and .pdf.</p>
+      <input id="softpharmFile" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" onchange="loadSoftPharmFile(event)">
+      <label class="save" for="softpharmFile">Choose Excel, CSV or PDF file</label>
+      <div class="note" style="margin-top:10px">or drag the file anywhere inside this box</div>
+      <div id="softpharmFileName" class="note" style="margin-top:8px">No file selected.</div>
     </div>
 
     <div id="softpharmImportArea" style="display:none">
@@ -165,27 +168,22 @@ body:has(#shell.show) #login{display:none!important;}
       </div>
 
       <div class="import-toolbar">
-        <input id="softpharmSearch" placeholder="Search product name, barcode, brand or category…" oninput="renderSoftPharmPreview()">
-        <select id="softpharmDefaultCategory" title="Category used when the file category is missing or unknown"></select>
+        <input id="softpharmSearch" placeholder="Search product name or barcode…" oninput="softpharmVisibleLimit=100;renderSoftPharmPreview()">
         <button class="save" type="button" onclick="selectAllSoftPharm(true)">Select all products</button>
         <button class="secondary" type="button" onclick="selectAllSoftPharm(false)">Clear all</button>
         <button class="secondary" type="button" onclick="selectVisibleSoftPharm(true)">Select visible</button>
         <button class="secondary" type="button" onclick="selectVisibleSoftPharm(false)">Clear visible</button>
       </div>
 
-      <div class="import-category-picker">
-        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
-          <div><b>Quick select by category</b><div class="note">Click a category to select all its products. Click it again to clear that category.</div></div>
-          <span class="note" id="softpharmCategoryCount"></span>
-        </div>
-        <div id="softpharmCategoryButtons" class="row-actions" style="margin-top:12px;flex-wrap:wrap"></div>
-      </div>
-
       <div class="table-wrap">
         <table class="table import-table">
-          <thead><tr><th>Select</th><th>Product</th><th>Barcode</th><th>Brand</th><th>File category</th><th>Price</th><th>Stock</th><th>Status</th></tr></thead>
+          <thead><tr><th>Select</th><th>Product</th><th>Barcode</th><th>Category</th><th>Price</th><th>Status</th></tr></thead>
           <tbody id="softpharmPreviewRows"></tbody>
         </table>
+      </div>
+      <div id="softpharmLoadMoreWrap" class="import-load-more" style="display:none">
+        <button class="secondary" type="button" onclick="showMoreSoftPharmRows()">Show 100 more</button>
+        <span class="note" id="softpharmVisibleCount"></span>
       </div>
 
       <div class="row-actions" style="margin-top:16px">
@@ -193,7 +191,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or select complete categories, then untick any medicines before importing. Nothing is uploaded until you press “Import selected products”. Existing products keep their images and descriptions while price and stock are updated.</div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. All imported products are placed in the <b>para</b> category. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3</span></div>
     </div>
   </div>
 </section>
@@ -631,14 +629,9 @@ async function changePassword(){let cur=$('currentPassword').value,newp=$('newPa
 
 let softpharmRows=[];
 let softpharmSelected=new Set();
+let softpharmVisibleLimit=100;
 
-function prepareSoftPharmImporter(){
-  const select=$('softpharmDefaultCategory');
-  if(!select)return;
-  const current=select.value;
-  select.innerHTML='<option value="">Use category from file</option>'+categories.map(c=>`<option value="${escapeAttr(c)}">Fallback: ${escapeHtml(c)}</option>`).join('');
-  if(current&&categories.includes(current))select.value=current;
-}
+function prepareSoftPharmImporter(){ return; }
 
 function normalizeImportKey(value){return String(value??'').trim().toLowerCase().replace(/[\s_\-./\\()]+/g,'')}
 function importValue(row,aliases){
@@ -669,92 +662,244 @@ function mapSoftPharmRow(raw,index){
   const name=cleanImportText(importValue(raw,['product name','product','item name','item','description','designation','article','article name','name','libelle','libellé']));
   const barcode=cleanImportText(importValue(raw,['barcode','bar code','ean','upc','gtin','item barcode','product barcode','code barre']));
   const code=cleanImportText(importValue(raw,['product code','item code','article code','code','reference','ref','sku']));
-  const price=importNumber(importValue(raw,['selling price','sale price','retail price','public price','price','unit price','prix vente','prix public','pvp']));
-  const stock=Math.max(0,importNumber(importValue(raw,['stock','quantity','qty','available quantity','balance','on hand','qte','quantite','quantité'])));
-  const brand=cleanImportText(importValue(raw,['brand','laboratory','lab','manufacturer','supplier','marque','laboratoire']));
-  const category=cleanImportText(importValue(raw,['category','family','group','department','section','categorie','catégorie','famille']));
-  return {key:String(index),name,barcode:barcode||code,code,price,stock,brand,category,raw};
+  const priceRaw=importValue(raw,['selling price','sale price','retail price','public price','price','unit price','prix vente','prix public','pvp']);
+  const currencyRaw=cleanImportText(importValue(raw,['currency','cur','devise','monnaie']));
+  const currency=currencyRaw.toUpperCase().replace(/\s+/g,'');
+
+  let price=importNumber(priceRaw);
+
+  // IMPORTANT:
+  // USD => keep the exact numeric price.
+  // LBP => convert ONLY that row to USD using 90,000 LBP = 1 USD.
+  if(currency==='LBP'){
+    price=price/90000;
+  }
+  // Any USD row is deliberately left untouched.
+  // For file types without a currency column, the numeric price is also left untouched.
+
+  const stockRaw=importValue(raw,['stock','quantity','qty','available quantity','balance','on hand','qte','quantite','quantité']);
+  const stockDefined=String(stockRaw??'').trim()!=='';
+  const stock=stockDefined?Math.max(0,importNumber(stockRaw)):999999;
+
+  const fileCategory=cleanImportText(importValue(raw,['category','family','group','department','section','categorie','catégorie','famille']));
+  const category=fileCategory || 'para';
+
+  return {
+    key:String(index),
+    name,
+    barcode:barcode||code,
+    code,
+    price,
+    stock,
+    stockDefined,
+    currency:'USD',
+    category,
+    raw
+  };
 }
 
-async function loadSoftPharmFile(event){
-  const file=event.target.files&&event.target.files[0];
+function softPharmPdfHeaderField(text){
+  const k=normalizeImportKey(text);
+  const groups={
+    name:['productname','product','itemname','item','description','designation','désignation','article','articlename','name','libelle','libellé'],
+    barcode:['barcode','barcod','ean','upc','gtin','itembarcode','productbarcode','codebarre'],
+    code:['productcode','itemcode','articlecode','code','reference','ref','sku'],
+    price:['sellingprice','saleprice','retailprice','publicprice','price','unitprice','prix','prixvente','prixpublic','prixunitaire','pvp','pu','pv'],
+    stock:['stock','stockactuel','quantity','qty','availablequantity','balance','onhand','qte','qté','quantite','quantité'],
+    brand:['brand','laboratory','lab','manufacturer','supplier','marque','laboratoire'],
+    category:['category','family','group','department','section','categorie','catégorie','famille'],
+    currency:['currency','cur','devise','monnaie'],
+    tva:['tva','vat','tax'],
+    tr:['tr'],
+    discount:['disc','disc.','discount','remise']
+  };
+  for(const [field,aliases] of Object.entries(groups))if(aliases.includes(k))return field;
+  return '';
+}
+function softPharmPdfGroupLines(items){
+  const lines=[];
+  items.filter(i=>String(i.str||'').trim()).forEach(item=>{
+    const y=Number(item.transform?.[5]||0),x=Number(item.transform?.[4]||0);
+    let line=lines.find(l=>Math.abs(l.y-y)<=2.5);
+    if(!line){line={y,items:[]};lines.push(line)}
+    line.items.push({text:cleanImportText(item.str),x,width:Number(item.width||0)});
+  });
+  return lines.sort((a,b)=>b.y-a.y).map(l=>({y:l.y,items:l.items.sort((a,b)=>a.x-b.x)}));
+}
+function softPharmPdfDetectHeader(line){
+  const cells=[];
+  for(const item of line.items){
+    const field=softPharmPdfHeaderField(item.text);
+    if(field&&!cells.some(c=>c.field===field))cells.push({field,x:item.x});
+  }
+  return cells.length>=2?cells.sort((a,b)=>a.x-b.x):null;
+}
+function softPharmPdfRowFromColumns(line,columns){
+  if(!columns?.length)return null;
+  const out={};
+  line.items.forEach(item=>{
+    let best=0,bestDist=Infinity;
+    columns.forEach((c,i)=>{const d=Math.abs(item.x-c.x);if(d<bestDist){bestDist=d;best=i}});
+    const field=columns[best].field;
+    out[field]=cleanImportText((out[field]?out[field]+' ':'')+item.text);
+  });
+  return out;
+}
+
+function softPharmPriceListPdfRow(line){
+  const parts=line.items.map(i=>cleanImportText(i.text)).filter(Boolean);
+  if(parts.length<4)return null;
+
+  // Uploaded SoftPharm PriceList format:
+  // Code | Description | Tva | Price | Cur | Tr | Disc.
+  const code=String(parts[0]||'').replace(/\s/g,'');
+  if(!/^\d{5,8}$/.test(code))return null;
+
+  // Currency is authoritative. NEVER infer USD/LBP from the numeric price.
+  const curIndex=parts.findIndex((v,i)=>i>0 && /^(USD|LBP)$/i.test(String(v).trim()));
+  if(curIndex<0)return null;
+  const currency=String(parts[curIndex]).trim().toUpperCase();
+
+  // Price is the numeric cell immediately before Cur (allowing PDF.js to split spaces).
+  let priceIndex=curIndex-1;
+  while(priceIndex>0){
+    const candidate=String(parts[priceIndex]||'').trim().replace(/\s/g,'');
+    if(/^-?\d[\d,]*(?:\.\d+)?$/.test(candidate))break;
+    priceIndex--;
+  }
+  if(priceIndex<=0)return null;
+
+  const priceText=String(parts[priceIndex]).trim();
+  let nameParts=parts.slice(1,priceIndex);
+
+  // TVA is not part of the product name.
+  if(nameParts.length && /^tva$/i.test(nameParts[nameParts.length-1]))nameParts.pop();
+
+  const name=cleanImportText(nameParts.join(' '));
+  if(!name)return null;
+
+  return {
+    code,
+    barcode:code,
+    name,
+    price:priceText,
+    currency,
+    category:'para'
+  };
+}
+
+function softPharmPdfFallbackRow(line){
+  const parts=line.items.map(i=>i.text).filter(Boolean);
+  if(parts.length<2)return null;
+  const joined=parts.join(' ');
+  if(/^(page\s+\d+|total|subtotal|softpharm|inventory|stock report)/i.test(joined))return null;
+  const barcodeIndex=parts.findIndex(v=>/^\d{8,14}$/.test(v.replace(/\s/g,'')));
+  const numeric=[];parts.forEach((v,i)=>{if(/^[-+]?\d+(?:[.,]\d+)?$/.test(v.replace(/\s/g,'')))numeric.push(i)});
+  if(barcodeIndex<0&&numeric.length<1)return null;
+  const priceIndex=numeric.length>=2?numeric[numeric.length-2]:numeric[numeric.length-1];
+  const stockIndex=numeric.length>=2?numeric[numeric.length-1]:-1;
+  const stop=Math.min(...[barcodeIndex,priceIndex,stockIndex].filter(i=>i>=0));
+  const name=cleanImportText(parts.slice(0,stop>=0?stop:parts.length).join(' '));
+  if(!name||softPharmPdfHeaderField(name))return null;
+  return {name,barcode:barcodeIndex>=0?parts[barcodeIndex]:'',price:priceIndex>=0?parts[priceIndex]:'',stock:stockIndex>=0?parts[stockIndex]:''};
+}
+async function extractSoftPharmPdfRows(data){
+  let pdfjsLib=window.pdfjsLib;
+  if(!pdfjsLib){
+    pdfjsLib=await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+  }
+  if(pdfjsLib.GlobalWorkerOptions)pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(data)}).promise;
+  const rows=[];
+  let columns=null;
+  for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+    const page=await pdf.getPage(pageNo),content=await page.getTextContent(),lines=softPharmPdfGroupLines(content.items);
+    for(const line of lines){
+      const header=softPharmPdfDetectHeader(line);
+      if(header){columns=header;continue}
+      const raw=softPharmPriceListPdfRow(line)||(columns?softPharmPdfRowFromColumns(line,columns):softPharmPdfFallbackRow(line));
+      if(raw&&cleanImportText(raw.name||raw.product||raw.description||''))rows.push(raw);
+    }
+  }
+  return rows;
+}
+async function processSoftPharmFile(file){
   if(!file)return;
+  const valid=/\.(xlsx|xls|csv|pdf)$/i.test(file.name||'')||file.type==='application/pdf';
+  if(!valid){alert('Please use an Excel, CSV or PDF file.');return}
   $('softpharmFileName').textContent='Reading '+file.name+'…';
   try{
     const data=await file.arrayBuffer();
-    const workbook=XLSX.read(data,{type:'array',cellDates:true});
-    const sheet=workbook.Sheets[workbook.SheetNames[0]];
-    const rawRows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+    const isPdf=/\.pdf$/i.test(file.name)||file.type==='application/pdf';
+    let rawRows=[];
+    if(isPdf){
+      rawRows=await extractSoftPharmPdfRows(data);
+    }else{
+      const workbook=XLSX.read(data,{type:'array',cellDates:true});
+      const sheet=workbook.Sheets[workbook.SheetNames[0]];
+      rawRows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+    }
     softpharmRows=rawRows.map(mapSoftPharmRow).filter(r=>r.name);
     softpharmSelected=new Set();
+    softpharmVisibleLimit=100;
     $('softpharmFileName').textContent=file.name+' — '+softpharmRows.length+' product rows found';
     $('softpharmImportArea').style.display='block';
     $('softpharmSearch').value='';
     prepareSoftPharmImporter();
     renderSoftPharmPreview();
-    if(!softpharmRows.length)alert('No product names were detected. Send me the sample file so its column names can be matched.');
+    if(!softpharmRows.length)alert(isPdf?'No product rows were detected in this PDF. SoftPharm PDFs need selectable table text (not a scanned image).':'No product names were detected. Send me the sample file so its column names can be matched.');
   }catch(err){
     console.error(err);softpharmRows=[];$('softpharmImportArea').style.display='none';
     $('softpharmFileName').textContent='Could not read this file.';
-    alert('Could not read the Excel/CSV file: '+err.message);
+    alert('Could not read the Excel/CSV/PDF file: '+err.message);
   }
 }
+async function loadSoftPharmFile(event){
+  const file=event.target.files&&event.target.files[0];
+  await processSoftPharmFile(file);
+}
+function handleSoftPharmDragOver(event){event.preventDefault();event.stopPropagation();$('softpharmDropZone')?.classList.add('dragging')}
+function handleSoftPharmDragLeave(event){event.preventDefault();event.stopPropagation();$('softpharmDropZone')?.classList.remove('dragging')}
+async function handleSoftPharmDrop(event){
+  event.preventDefault();event.stopPropagation();$('softpharmDropZone')?.classList.remove('dragging');
+  const file=event.dataTransfer?.files?.[0];
+  if(file)await processSoftPharmFile(file);
+}
+
 function filteredSoftPharmRows(){
   const q=normalizeImportKey($('softpharmSearch')?.value||'');
   if(!q)return softpharmRows;
-  return softpharmRows.filter(r=>[r.name,r.barcode,r.brand,r.category].some(v=>normalizeImportKey(v).includes(q)));
+  return softpharmRows.filter(r=>[r.name,r.barcode].some(v=>normalizeImportKey(v).includes(q)));
 }
 function renderSoftPharmPreview(){
-  const rows=filteredSoftPharmRows();
+  const filtered=filteredSoftPharmRows();
+  const rows=filtered.slice(0,softpharmVisibleLimit);
   const body=$('softpharmPreviewRows');if(!body)return;
   body.innerHTML=rows.length?rows.map(r=>{
     const existing=getExistingImportProduct(r);
-    return `<tr class="${existing?'import-existing':''}"><td><input type="checkbox" ${softpharmSelected.has(r.key)?'checked':''} onchange="toggleSoftPharmRow('${r.key}',this.checked)"></td><td><b>${escapeHtml(r.name)}</b></td><td>${escapeHtml(r.barcode||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.category||'—')}</td><td>${money(r.price)}</td><td>${Number(r.stock||0)}</td><td>${existing?'Will update':'New product'}</td></tr>`;
-  }).join(''):'<tr><td colspan="8" class="muted">No matching products.</td></tr>';
+    return `<tr class="${existing?'import-existing':''}"><td><input type="checkbox" ${softpharmSelected.has(r.key)?'checked':''} onchange="toggleSoftPharmRow('${r.key}',this.checked)"></td><td><b>${escapeHtml(r.name)}</b></td><td>${escapeHtml(r.barcode||'—')}</td><td>${escapeHtml(r.category||'para')}</td><td>${money(r.price)}</td><td>${existing?'Will update':'New product'}</td></tr>`;
+  }).join(''):'<tr><td colspan="6" class="muted">No matching products.</td></tr>';
   $('importRowsFound').textContent=String(softpharmRows.length);
   $('importSelectedCount').textContent=String(softpharmSelected.size);
   $('importExistingCount').textContent=String(softpharmRows.filter(getExistingImportProduct).length);
-  renderSoftPharmCategoryButtons();
+  const more=$('softpharmLoadMoreWrap'),count=$('softpharmVisibleCount');
+  if(more)more.style.display=filtered.length>rows.length?'block':'none';
+  if(count)count.textContent=`Showing ${rows.length} of ${filtered.length} matching products`;
 }
+function showMoreSoftPharmRows(){softpharmVisibleLimit+=100;renderSoftPharmPreview()}
 function toggleSoftPharmRow(key,checked){if(checked)softpharmSelected.add(String(key));else softpharmSelected.delete(String(key));renderSoftPharmPreview()}
-function selectVisibleSoftPharm(checked){filteredSoftPharmRows().forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
+function selectVisibleSoftPharm(checked){filteredSoftPharmRows().slice(0,softpharmVisibleLimit).forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
 function selectAllSoftPharm(checked){softpharmRows.forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
-function softpharmCategoryLabel(row){return cleanImportText(row.category)||'Uncategorised'}
-function toggleSoftPharmCategory(encodedCategory){
-  const category=decodeURIComponent(String(encodedCategory||''));
-  const rows=softpharmRows.filter(r=>softpharmCategoryLabel(r)===category);
-  const allSelected=rows.length&&rows.every(r=>softpharmSelected.has(r.key));
-  rows.forEach(r=>allSelected?softpharmSelected.delete(r.key):softpharmSelected.add(r.key));
-  renderSoftPharmPreview();
-}
-function renderSoftPharmCategoryButtons(){
-  const wrap=$('softpharmCategoryButtons');if(!wrap)return;
-  const grouped={};
-  softpharmRows.forEach(r=>{const c=softpharmCategoryLabel(r);(grouped[c]||(grouped[c]=[])).push(r)});
-  const names=Object.keys(grouped).sort((a,b)=>a.localeCompare(b));
-  if($('softpharmCategoryCount'))$('softpharmCategoryCount').textContent=names.length+` categor${names.length===1?'y':'ies'} found`;
-  wrap.innerHTML=names.length?names.map(c=>{
-    const rows=grouped[c],count=rows.filter(r=>softpharmSelected.has(r.key)).length,all=count===rows.length;
-    return `<button type="button" class="${all?'save':'secondary'}" onclick="toggleSoftPharmCategory('${encodeURIComponent(c)}')">${all?'✓ ':''}${escapeHtml(c)} (${count}/${rows.length})</button>`;
-  }).join(''):'<span class="note">No categories were detected in this file.</span>';
-}
-function resolveImportCategory(row){
-  const fallback=$('softpharmDefaultCategory')?.value||'';
-  const fileCat=categories.find(c=>normalizeImportKey(c)===normalizeImportKey(row.category));
-  return fileCat||fallback||row.category||categories[0]||'Uncategorised';
-}
+function resolveImportCategory(row){ return cleanImportText(row?.category||'') || 'para'; }
 async function importSelectedSoftPharmProducts(){
   if(!requireFirebase())return;
   const selected=softpharmRows.filter(r=>softpharmSelected.has(r.key));
   if(!selected.length)return alert('Select at least one product first.');
-  if(!confirm(`Import ${selected.length} selected product(s)? Existing matches will have their price and stock updated.`))return;
+  if(!confirm(`Import ${selected.length} selected product(s)? Products with no category will automatically use para. Existing matches will be updated.`))return;
   const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing…';
   try{
-    // Automatically create every category used by the selected Excel products.
-    // The shared catalog document is watched by both the admin and customer website,
-    // so new categories appear everywhere immediately after the import.
-    const selectedCategories=selected.map(resolveImportCategory).map(c=>cleanImportText(c)).filter(Boolean);
-    const mergedCategories=normalizeCategories([...categories,...selectedCategories]);
+    // Keep every SoftPharm import in the single shared 'para' category.
+    const mergedCategories=normalizeCategories([...categories,'para',...selected.map(resolveImportCategory)]);
     let batch=db.batch(),ops=0,done=0,created=0,updated=0;
     batch.set(db.collection('settings').doc('catalog'),{
       categories:mergedCategories,
@@ -765,8 +910,8 @@ async function importSelectedSoftPharmProducts(){
       const existing=getExistingImportProduct(row);
       const ref=existing?db.collection('products').doc(String(existing.id)):db.collection('products').doc();
       const data={
-        name:row.name,barcode:row.barcode||'',brand:row.brand||existing?.brand||'',cat:resolveImportCategory(row),
-        price:Number(row.price||0),stock:Number(row.stock||0),active:true,prescriptionRequired:false,
+        name:row.name,barcode:row.barcode||'',cat:resolveImportCategory(row),
+        price:Number(row.price||0),stock:row.stockDefined?Number(row.stock||0):999999,active:true,prescriptionRequired:false,
         importSource:'SoftPharm file',softpharmCode:row.code||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()
       };
       if(!existing){Object.assign(data,{genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});created++}else updated++;
@@ -774,13 +919,13 @@ async function importSelectedSoftPharmProducts(){
       if(ops>=400){await batch.commit();batch=db.batch();ops=0;progress.textContent=`Imported ${done} of ${selected.length}…`}
     }
     if(ops)await batch.commit();
-    progress.textContent=`Done: ${created} new, ${updated} updated. Categories added automatically.`;
-    alert(`Import complete. ${created} new product(s) added and ${updated} existing product(s) updated. Their categories were also added automatically to the admin and customer website.`);
+    progress.textContent=`Done: ${created} new, ${updated} updated. Missing categories were set to para.`;
+    alert(`Import complete. ${created} new product(s) added and ${updated} existing product(s) updated. Products without a category were set to para.`);
     softpharmSelected.clear();renderSoftPharmPreview();
   }catch(err){console.error(err);progress.textContent='Import failed.';alert('Could not import products: '+err.message)}finally{btn.disabled=false}
 }
 function clearSoftPharmImport(){
-  softpharmRows=[];softpharmSelected.clear();
+  softpharmRows=[];softpharmSelected.clear();softpharmVisibleLimit=100;
   if($('softpharmFile'))$('softpharmFile').value='';
   if($('softpharmFileName'))$('softpharmFileName').textContent='No file selected.';
   if($('softpharmImportArea'))$('softpharmImportArea').style.display='none';
