@@ -113,6 +113,8 @@ body:has(#shell.show) #login{display:none!important;}
 .import-drop{border:2px dashed #b9cec3;border-radius:16px;padding:24px;text-align:center;background:#f7fbf9;margin-bottom:16px}
 .import-drop input{display:none}
 .import-drop label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.import-drop.dragging{border-color:#4f8f70;background:#eef8f2;box-shadow:0 0 0 3px rgba(79,143,112,.10)}
+.import-load-more{text-align:center;padding:14px 0 4px}.import-load-more .note{display:block;margin-top:8px}
 .import-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0}
 .import-toolbar input,.import-toolbar select{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
 .import-toolbar input{min-width:250px;flex:1}
@@ -149,12 +151,13 @@ body:has(#shell.show) #login{display:none!important;}
   </div>
 
   <div class="card">
-    <div class="import-drop">
+    <div class="import-drop" id="softpharmDropZone" ondragover="handleSoftPharmDragOver(event)" ondragleave="handleSoftPharmDragLeave(event)" ondrop="handleSoftPharmDrop(event)">
       <h2 style="margin-top:0">1. Choose the exported file</h2>
-      <p class="muted">Accepted formats: .xlsx, .xls, .csv and .pdf. Nothing is imported until you select products and press the import button.</p>
+      <p class="muted">Drag & drop a SoftPharm file here, or choose it manually. Accepted formats: .xlsx, .xls, .csv and .pdf.</p>
       <input id="softpharmFile" type="file" accept=".xlsx,.xls,.csv,.pdf,application/pdf" onchange="loadSoftPharmFile(event)">
       <label class="save" for="softpharmFile">Choose Excel, CSV or PDF file</label>
-      <div id="softpharmFileName" class="note" style="margin-top:10px">No file selected.</div>
+      <div class="note" style="margin-top:10px">or drag the file anywhere inside this box</div>
+      <div id="softpharmFileName" class="note" style="margin-top:8px">No file selected.</div>
     </div>
 
     <div id="softpharmImportArea" style="display:none">
@@ -165,7 +168,7 @@ body:has(#shell.show) #login{display:none!important;}
       </div>
 
       <div class="import-toolbar">
-        <input id="softpharmSearch" placeholder="Search product name, barcode, brand or category…" oninput="renderSoftPharmPreview()">
+        <input id="softpharmSearch" placeholder="Search product name, barcode, brand or category…" oninput="softpharmVisibleLimit=100;renderSoftPharmPreview()">
         <select id="softpharmDefaultCategory" title="Category used when the file category is missing or unknown"></select>
         <button class="save" type="button" onclick="selectAllSoftPharm(true)">Select all products</button>
         <button class="secondary" type="button" onclick="selectAllSoftPharm(false)">Clear all</button>
@@ -186,6 +189,10 @@ body:has(#shell.show) #login{display:none!important;}
           <thead><tr><th>Select</th><th>Product</th><th>Barcode</th><th>Brand</th><th>File category</th><th>Price</th><th>Stock</th><th>Status</th></tr></thead>
           <tbody id="softpharmPreviewRows"></tbody>
         </table>
+      </div>
+      <div id="softpharmLoadMoreWrap" class="import-load-more" style="display:none">
+        <button class="secondary" type="button" onclick="showMoreSoftPharmRows()">Show 100 more</button>
+        <span class="note" id="softpharmVisibleCount"></span>
       </div>
 
       <div class="row-actions" style="margin-top:16px">
@@ -631,6 +638,7 @@ async function changePassword(){let cur=$('currentPassword').value,newp=$('newPa
 
 let softpharmRows=[];
 let softpharmSelected=new Set();
+let softpharmVisibleLimit=100;
 
 function prepareSoftPharmImporter(){
   const select=$('softpharmDefaultCategory');
@@ -754,9 +762,10 @@ async function extractSoftPharmPdfRows(data){
   }
   return rows;
 }
-async function loadSoftPharmFile(event){
-  const file=event.target.files&&event.target.files[0];
+async function processSoftPharmFile(file){
   if(!file)return;
+  const valid=/\.(xlsx|xls|csv|pdf)$/i.test(file.name||'')||file.type==='application/pdf';
+  if(!valid){alert('Please use an Excel, CSV or PDF file.');return}
   $('softpharmFileName').textContent='Reading '+file.name+'…';
   try{
     const data=await file.arrayBuffer();
@@ -771,6 +780,7 @@ async function loadSoftPharmFile(event){
     }
     softpharmRows=rawRows.map(mapSoftPharmRow).filter(r=>r.name);
     softpharmSelected=new Set();
+    softpharmVisibleLimit=100;
     $('softpharmFileName').textContent=file.name+' — '+softpharmRows.length+' product rows found';
     $('softpharmImportArea').style.display='block';
     $('softpharmSearch').value='';
@@ -783,13 +793,26 @@ async function loadSoftPharmFile(event){
     alert('Could not read the Excel/CSV/PDF file: '+err.message);
   }
 }
+async function loadSoftPharmFile(event){
+  const file=event.target.files&&event.target.files[0];
+  await processSoftPharmFile(file);
+}
+function handleSoftPharmDragOver(event){event.preventDefault();event.stopPropagation();$('softpharmDropZone')?.classList.add('dragging')}
+function handleSoftPharmDragLeave(event){event.preventDefault();event.stopPropagation();$('softpharmDropZone')?.classList.remove('dragging')}
+async function handleSoftPharmDrop(event){
+  event.preventDefault();event.stopPropagation();$('softpharmDropZone')?.classList.remove('dragging');
+  const file=event.dataTransfer?.files?.[0];
+  if(file)await processSoftPharmFile(file);
+}
+
 function filteredSoftPharmRows(){
   const q=normalizeImportKey($('softpharmSearch')?.value||'');
   if(!q)return softpharmRows;
   return softpharmRows.filter(r=>[r.name,r.barcode,r.brand,r.category].some(v=>normalizeImportKey(v).includes(q)));
 }
 function renderSoftPharmPreview(){
-  const rows=filteredSoftPharmRows();
+  const filtered=filteredSoftPharmRows();
+  const rows=filtered.slice(0,softpharmVisibleLimit);
   const body=$('softpharmPreviewRows');if(!body)return;
   body.innerHTML=rows.length?rows.map(r=>{
     const existing=getExistingImportProduct(r);
@@ -798,10 +821,14 @@ function renderSoftPharmPreview(){
   $('importRowsFound').textContent=String(softpharmRows.length);
   $('importSelectedCount').textContent=String(softpharmSelected.size);
   $('importExistingCount').textContent=String(softpharmRows.filter(getExistingImportProduct).length);
+  const more=$('softpharmLoadMoreWrap'),count=$('softpharmVisibleCount');
+  if(more)more.style.display=filtered.length>rows.length?'block':'none';
+  if(count)count.textContent=`Showing ${rows.length} of ${filtered.length} matching products`;
   renderSoftPharmCategoryButtons();
 }
+function showMoreSoftPharmRows(){softpharmVisibleLimit+=100;renderSoftPharmPreview()}
 function toggleSoftPharmRow(key,checked){if(checked)softpharmSelected.add(String(key));else softpharmSelected.delete(String(key));renderSoftPharmPreview()}
-function selectVisibleSoftPharm(checked){filteredSoftPharmRows().forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
+function selectVisibleSoftPharm(checked){filteredSoftPharmRows().slice(0,softpharmVisibleLimit).forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
 function selectAllSoftPharm(checked){softpharmRows.forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview()}
 function softpharmCategoryLabel(row){return cleanImportText(row.category)||'Uncategorised'}
 function toggleSoftPharmCategory(encodedCategory){
@@ -864,7 +891,7 @@ async function importSelectedSoftPharmProducts(){
   }catch(err){console.error(err);progress.textContent='Import failed.';alert('Could not import products: '+err.message)}finally{btn.disabled=false}
 }
 function clearSoftPharmImport(){
-  softpharmRows=[];softpharmSelected.clear();
+  softpharmRows=[];softpharmSelected.clear();softpharmVisibleLimit=100;
   if($('softpharmFile'))$('softpharmFile').value='';
   if($('softpharmFileName'))$('softpharmFileName').textContent='No file selected.';
   if($('softpharmImportArea'))$('softpharmImportArea').style.display='none';
