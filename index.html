@@ -264,12 +264,40 @@ function updateAuthButton(userOverride){let user=userOverride!==undefined?userOv
 
 function startCatalogListeners(){
   if(!firebaseReady)return;
-  unsubscribeProducts=db.collection('products').orderBy('name').onSnapshot(snap=>{
-    products=snap.docs.map(d=>({id:d.id,...d.data(),prescriptionRequired:false})).filter(p=>p.active!==false);
-    renderCats();renderProducts();
+  unsubscribeProducts=db.collection('products').onSnapshot(snap=>{
+    products=snap.docs
+      .map(d=>{
+        const p={id:d.id,...d.data(),prescriptionRequired:false};
+        const cat=String(p.cat||'').trim();
+        if(!cat||/^uncategori[sz]ed$/i.test(cat))p.cat='para';
+        return p;
+      })
+      .filter(p=>p.active!==false)
+      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
+    // Remove deleted products immediately from customer-side saved views too.
+    const liveIds=new Set(products.map(p=>String(p.id)));
+    recent=recent.filter(id=>liveIds.has(String(id)));
+    wishlist=wishlist.filter(id=>liveIds.has(String(id)));
+    cart=cart.filter(item=>liveIds.has(String(item.id)));
+    try{
+      localStorage.setItem('nadineRecent',JSON.stringify(recent));
+      localStorage.setItem(activeWishlistKey,JSON.stringify(wishlist));
+      localStorage.setItem(activeCartKey,JSON.stringify(cart));
+    }catch(e){}
+
+    renderCats();renderProducts();renderRecent();updateCartCount();updateWishlistCount();
+    if($('cartOverlay')?.classList.contains('show'))renderCart();
+    if($('wishlistOverlay')?.classList.contains('show'))renderWishlist();
   },err=>console.error('Products could not load',err));
   unsubscribeCatalog=db.collection('settings').doc('catalog').onSnapshot(doc=>{
-    categories=doc.exists&&Array.isArray(doc.data().categories)?[...new Map(doc.data().categories.map(v=>String(v||'').trim()).filter(Boolean).map(v=>[v.toLowerCase(),v])).values()]:[];
+    categories=doc.exists&&Array.isArray(doc.data().categories)?[...new Map(
+      doc.data().categories
+        .map(v=>String(v||'').trim())
+        .filter(v=>v&&!/^uncategori[sz]ed$/i.test(v))
+        .map(v=>[v.toLowerCase(),v])
+    ).values()]:[];
+    if(products.some(p=>String(p.cat||'').toLowerCase()==='para')&&!categories.some(c=>c.toLowerCase()==='para'))categories.push('para');
     if(selectedCat!=='All'&&!categories.includes(selectedCat))selectedCat='All';
     renderCats();renderProducts();renderRecent();
   },err=>console.error('Categories could not load',err));
