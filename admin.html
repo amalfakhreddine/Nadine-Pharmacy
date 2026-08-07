@@ -200,7 +200,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or select complete categories, then untick any medicines before importing. Nothing is uploaded until you press “Import selected products”. Existing products keep their images and descriptions while price and stock are updated.</div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or select complete categories, then untick any medicines before importing. Nothing is uploaded until you press “Import selected products”. Existing products keep their images and descriptions while price and stock are updated. If the file has no quantity column, the product is treated as unlimited stock. LBP prices are converted to USD at LBP ÷ 90,000.</div>
     </div>
   </div>
 </section>
@@ -677,11 +677,18 @@ function mapSoftPharmRow(raw,index){
   const name=cleanImportText(importValue(raw,['product name','product','item name','item','description','designation','article','article name','name','libelle','libellé']));
   const barcode=cleanImportText(importValue(raw,['barcode','bar code','ean','upc','gtin','item barcode','product barcode','code barre']));
   const code=cleanImportText(importValue(raw,['product code','item code','article code','code','reference','ref','sku']));
-  const price=importNumber(importValue(raw,['selling price','sale price','retail price','public price','price','unit price','prix vente','prix public','pvp']));
-  const stock=Math.max(0,importNumber(importValue(raw,['stock','quantity','qty','available quantity','balance','on hand','qte','quantite','quantité'])));
+  const priceRaw=importValue(raw,['selling price','sale price','retail price','public price','price','unit price','prix vente','prix public','pvp']);
+  const currency=cleanImportText(importValue(raw,['currency','cur','devise','monnaie'])).toUpperCase();
+  let price=importNumber(priceRaw);
+  const priceText=String(priceRaw??'').toUpperCase();
+  const isLBP=currency==='LBP'||currency==='L.L.'||currency==='LL'||priceText.includes('LBP');
+  if(isLBP&&price>0)price=price/90000;
+  const stockRaw=importValue(raw,['stock','quantity','qty','available quantity','balance','on hand','qte','quantite','quantité']);
+  const stockDefined=String(stockRaw??'').trim()!=='';
+  const stock=stockDefined?Math.max(0,importNumber(stockRaw)):999999;
   const brand=cleanImportText(importValue(raw,['brand','laboratory','lab','manufacturer','supplier','marque','laboratoire']));
   const category=cleanImportText(importValue(raw,['category','family','group','department','section','categorie','catégorie','famille']));
-  return {key:String(index),name,barcode:barcode||code,code,price,stock,brand,category,raw};
+  return {key:String(index),name,barcode:barcode||code,code,price,stock,stockDefined,stockUnlimited:!stockDefined,currency:'USD',brand,category,raw};
 }
 
 function softPharmPdfHeaderField(text){
@@ -693,7 +700,11 @@ function softPharmPdfHeaderField(text){
     price:['sellingprice','saleprice','retailprice','publicprice','price','unitprice','prix','prixvente','prixpublic','prixunitaire','pvp','pu','pv'],
     stock:['stock','stockactuel','quantity','qty','availablequantity','balance','onhand','qte','qté','quantite','quantité'],
     brand:['brand','laboratory','lab','manufacturer','supplier','marque','laboratoire'],
-    category:['category','family','group','department','section','categorie','catégorie','famille']
+    category:['category','family','group','department','section','categorie','catégorie','famille'],
+    currency:['currency','cur','devise','monnaie'],
+    tva:['tva','vat','tax'],
+    tr:['tr'],
+    discount:['disc','disc.','discount','remise']
   };
   for(const [field,aliases] of Object.entries(groups))if(aliases.includes(k))return field;
   return '';
@@ -816,7 +827,7 @@ function renderSoftPharmPreview(){
   const body=$('softpharmPreviewRows');if(!body)return;
   body.innerHTML=rows.length?rows.map(r=>{
     const existing=getExistingImportProduct(r);
-    return `<tr class="${existing?'import-existing':''}"><td><input type="checkbox" ${softpharmSelected.has(r.key)?'checked':''} onchange="toggleSoftPharmRow('${r.key}',this.checked)"></td><td><b>${escapeHtml(r.name)}</b></td><td>${escapeHtml(r.barcode||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.category||'—')}</td><td>${money(r.price)}</td><td>${Number(r.stock||0)}</td><td>${existing?'Will update':'New product'}</td></tr>`;
+    return `<tr class="${existing?'import-existing':''}"><td><input type="checkbox" ${softpharmSelected.has(r.key)?'checked':''} onchange="toggleSoftPharmRow('${r.key}',this.checked)"></td><td><b>${escapeHtml(r.name)}</b></td><td>${escapeHtml(r.barcode||'—')}</td><td>${escapeHtml(r.brand||'—')}</td><td>${escapeHtml(r.category||'—')}</td><td>${money(r.price)}</td><td>${r.stockUnlimited?'Unlimited':Number(r.stock||0)}</td><td>${existing?'Will update':'New product'}</td></tr>`;
   }).join(''):'<tr><td colspan="8" class="muted">No matching products.</td></tr>';
   $('importRowsFound').textContent=String(softpharmRows.length);
   $('importSelectedCount').textContent=String(softpharmSelected.size);
@@ -858,7 +869,7 @@ async function importSelectedSoftPharmProducts(){
   if(!requireFirebase())return;
   const selected=softpharmRows.filter(r=>softpharmSelected.has(r.key));
   if(!selected.length)return alert('Select at least one product first.');
-  if(!confirm(`Import ${selected.length} selected product(s)? Existing matches will have their price and stock updated.`))return;
+  if(!confirm(`Import ${selected.length} selected product(s)? Existing matches will have their price and stock updated. Products without a quantity are treated as unlimited stock.`))return;
   const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing…';
   try{
     // Automatically create every category used by the selected imported products.
@@ -877,7 +888,7 @@ async function importSelectedSoftPharmProducts(){
       const ref=existing?db.collection('products').doc(String(existing.id)):db.collection('products').doc();
       const data={
         name:row.name,barcode:row.barcode||'',brand:row.brand||existing?.brand||'',cat:resolveImportCategory(row),
-        price:Number(row.price||0),stock:Number(row.stock||0),active:true,prescriptionRequired:false,
+        price:Number(row.price||0),stock:Number(row.stock||0),stockUnlimited:!!row.stockUnlimited,active:true,prescriptionRequired:false,
         importSource:'SoftPharm file',softpharmCode:row.code||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()
       };
       if(!existing){Object.assign(data,{genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});created++}else updated++;
