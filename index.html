@@ -262,48 +262,87 @@ insurance:`<h3>Insurance partners</h3><p>Nadine Parapharm works with GlobeMed ne
 function openPolicy(type,fromHistory=false){if(!fromHistory)nadinePush('policy',{type:String(type)});$('policyTitle').textContent=({privacy:'Privacy Policy',terms:'Terms & Conditions',delivery:'Delivery & Returns',prescription:'Medicine Information',insurance:'Insurance Partners'})[type]||'Policy';$('policyBody').innerHTML=policies[type]||'';$('policyModal').classList.add('show');setPageLocked(true)}
 function updateAuthButton(userOverride){let user=userOverride!==undefined?userOverride:(auth&&auth.currentUser);$('authBtn').textContent=user?`Hi, ${(user.displayName||user.email||'Customer').split(' ')[0]}`:'Sign In';$('authBtn').classList.toggle('signed-in',!!user)}
 
+function syncCustomerSavedItemsToLiveProducts(){
+  const liveIds=new Set(products.map(p=>String(p.id)));
+  recent=recent.filter(id=>liveIds.has(String(id)));
+  wishlist=wishlist.filter(id=>liveIds.has(String(id)));
+  cart=cart.filter(item=>liveIds.has(String(item.id)));
+  try{
+    localStorage.setItem('nadineRecent',JSON.stringify(recent));
+    localStorage.setItem(activeWishlistKey,JSON.stringify(wishlist));
+    localStorage.setItem(activeCartKey,JSON.stringify(cart));
+  }catch(e){}
+  updateCartCount();updateWishlistCount();
+}
+function applyCustomerProductSnapshot(snap){
+  products=snap.docs
+    .map(d=>{
+      const p={id:d.id,...d.data(),prescriptionRequired:false};
+      const cat=String(p.cat||'').trim();
+      if(!cat||/^uncategori[sz]ed$/i.test(cat))p.cat='para';
+      return p;
+    })
+    .filter(p=>p.active!==false)
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  syncCustomerSavedItemsToLiveProducts();
+  renderCats();renderProducts();renderRecent();
+  if($('cartOverlay')?.classList.contains('show'))renderCart();
+  if($('wishlistOverlay')?.classList.contains('show'))renderWishlist();
+}
 function startCatalogListeners(){
   if(!firebaseReady)return;
-  unsubscribeProducts=db.collection('products').onSnapshot(snap=>{
-    products=snap.docs
-      .map(d=>{
-        const p={id:d.id,...d.data(),prescriptionRequired:false};
-        const cat=String(p.cat||'').trim();
-        if(!cat||/^uncategori[sz]ed$/i.test(cat))p.cat='para';
-        return p;
-      })
-      .filter(p=>p.active!==false)
-      .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  if(unsubscribeProducts)unsubscribeProducts();
+  if(unsubscribeCatalog)unsubscribeCatalog();
+  if(unsubscribeShopSettings)unsubscribeShopSettings();
 
-    // Remove deleted products immediately from customer-side saved views too.
-    const liveIds=new Set(products.map(p=>String(p.id)));
-    recent=recent.filter(id=>liveIds.has(String(id)));
-    wishlist=wishlist.filter(id=>liveIds.has(String(id)));
-    cart=cart.filter(item=>liveIds.has(String(item.id)));
-    try{
-      localStorage.setItem('nadineRecent',JSON.stringify(recent));
-      localStorage.setItem(activeWishlistKey,JSON.stringify(wishlist));
-      localStorage.setItem(activeCartKey,JSON.stringify(cart));
-    }catch(e){}
+  // IMPORTANT: Never display an old Firestore cache snapshot as the live shop.
+  // The customer catalog only accepts server-confirmed snapshots. If the server
+  // cannot be reached, show an empty catalog rather than deleted/stale products.
+  unsubscribeProducts=db.collection('products').onSnapshot(
+    {includeMetadataChanges:true},
+    snap=>{
+      if(snap.metadata&&snap.metadata.fromCache){
+        // Ignore stale local cache. A server snapshot will follow when available.
+        return;
+      }
+      applyCustomerProductSnapshot(snap);
+    },
+    err=>{
+      console.error('Products could not load from server',err);
+      products=[];
+      syncCustomerSavedItemsToLiveProducts();
+      renderCats();renderProducts();renderRecent();
+      if($('cartOverlay')?.classList.contains('show'))renderCart();
+      if($('wishlistOverlay')?.classList.contains('show'))renderWishlist();
+    }
+  );
 
-    renderCats();renderProducts();renderRecent();updateCartCount();updateWishlistCount();
-    if($('cartOverlay')?.classList.contains('show'))renderCart();
-    if($('wishlistOverlay')?.classList.contains('show'))renderWishlist();
-  },err=>console.error('Products could not load',err));
-  unsubscribeCatalog=db.collection('settings').doc('catalog').onSnapshot(doc=>{
-    categories=doc.exists&&Array.isArray(doc.data().categories)?[...new Map(
-      doc.data().categories
-        .map(v=>String(v||'').trim())
-        .filter(v=>v&&!/^uncategori[sz]ed$/i.test(v))
-        .map(v=>[v.toLowerCase(),v])
-    ).values()]:[];
-    if(products.some(p=>String(p.cat||'').toLowerCase()==='para')&&!categories.some(c=>c.toLowerCase()==='para'))categories.push('para');
-    if(selectedCat!=='All'&&!categories.includes(selectedCat))selectedCat='All';
-    renderCats();renderProducts();renderRecent();
-  },err=>console.error('Categories could not load',err));
-  unsubscribeShopSettings=db.collection('settings').doc('shop').onSnapshot(doc=>{if(doc.exists)shopSettings={...shopSettings,...doc.data()};renderCart()},err=>console.error('Shop settings could not load',err));
+  unsubscribeCatalog=db.collection('settings').doc('catalog').onSnapshot(
+    {includeMetadataChanges:true},
+    doc=>{
+      if(doc.metadata&&doc.metadata.fromCache)return;
+      categories=doc.exists&&Array.isArray(doc.data().categories)?[...new Map(
+        doc.data().categories
+          .map(v=>String(v||'').trim())
+          .filter(v=>v&&!/^uncategori[sz]ed$/i.test(v))
+          .map(v=>[v.toLowerCase(),v])
+      ).values()]:[];
+      if(products.some(p=>String(p.cat||'').toLowerCase()==='para')&&!categories.some(c=>c.toLowerCase()==='para'))categories.push('para');
+      if(selectedCat!=='All'&&!categories.includes(selectedCat))selectedCat='All';
+      renderCats();renderProducts();renderRecent();
+    },
+    err=>{
+      console.error('Categories could not load from server',err);
+      categories=products.some(p=>String(p.cat||'').toLowerCase()==='para')?['para']:[];
+      selectedCat='All';renderCats();renderProducts();
+    }
+  );
+
+  unsubscribeShopSettings=db.collection('settings').doc('shop').onSnapshot(doc=>{
+    if(doc.exists)shopSettings={...shopSettings,...doc.data()};
+    renderCart();
+  },err=>console.error('Shop settings could not load',err));
 }
-
 
 
 /* Browser back/forward navigation for the single-page customer website. */
