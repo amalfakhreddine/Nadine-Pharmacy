@@ -248,6 +248,48 @@ function verifyAdminUser(user){
   const email=String(user.email||'').trim().toLowerCase();
   return user.uid===PRIMARY_ADMIN_UID || email===PRIMARY_ADMIN_EMAIL;
 }
+
+function orderSortTime(value){
+  try{
+    if(value&&typeof value.toDate==='function')return value.toDate().getTime();
+    const t=new Date(value||0).getTime();
+    return Number.isFinite(t)?t:0;
+  }catch(e){return 0}
+}
+function startOrdersListener(){
+  if(unsubscribeOrders)unsubscribeOrders();
+
+  unsubscribeOrders=db.collection('orders').onSnapshot(
+    snap=>{
+      orders=snap.docs
+        .map(d=>({docId:d.id,...d.data()}))
+        .sort((a,b)=>orderSortTime(b.createdAt)-orderSortTime(a.createdAt));
+
+      if($('error'))$('error').textContent='';
+      renderAll();
+    },
+    err=>{
+      console.error('Supabase orders listener failed',err);
+      if($('error'))$('error').textContent='Orders could not load: '+(err?.message||err);
+    }
+  );
+}
+function startReviewsListener(){
+  if(unsubscribeReviews)unsubscribeReviews();
+
+  unsubscribeReviews=db.collection('reviews').onSnapshot(
+    snap=>{
+      reviews=snap.docs
+        .map(d=>({id:d.id,...d.data()}))
+        .sort((a,b)=>orderSortTime(b.createdAt)-orderSortTime(a.createdAt));
+
+      if(typeof renderAdminReviews==='function')renderAdminReviews();
+      if(typeof updateReviewBadge==='function')updateReviewBadge();
+    },
+    err=>console.warn('Reviews could not load from Supabase',err)
+  );
+}
+
 function openAdminApp(user){
   const activeUser=user||auth?.currentUser;
   if(!activeUser){
@@ -260,7 +302,7 @@ function openAdminApp(user){
   $('login').style.display='none';
   $('shell').classList.add('show');
   $('shell').setAttribute('aria-hidden','false');
-  startOrdersListener();startCatalogListeners();startReviewsListener();renderAll();
+  if(typeof startOrdersListener==='function')startOrdersListener();if(typeof startCatalogListeners==='function')startCatalogListeners();if(typeof startReviewsListener==='function')startReviewsListener();renderAll();
 }
 function lockAdminApp(message=''){
   adminAppStarted=false;
@@ -346,6 +388,7 @@ async function testOrderNotification(){
   unlockOrderAudio();playOrderSound();
   if(('Notification' in window)&&Notification.permission==='granted')await showDesktopOrderNotification('Nadine Parapharm test',{body:'Browser alerts are working.',icon:'/icon-192.png'});
 }
+
 async function setReviewStatus(id,status){try{await db.collection('reviews').doc(id).update({status,moderatedBy:auth.currentUser?.email||'',moderatedAt:sbFieldValue.serverTimestamp(),updatedAt:sbFieldValue.serverTimestamp()})}catch(e){alert('Could not update review: '+e.message)}}
 async function replyToReview(id){const r=reviews.find(x=>x.id===id),reply=prompt('Public reply from Nadine Parapharm:',r?.adminReply||'');if(reply===null)return;try{await db.collection('reviews').doc(id).update({adminReply:reply.trim(),replyBy:auth.currentUser?.email||'',replyAt:sbFieldValue.serverTimestamp(),updatedAt:sbFieldValue.serverTimestamp()})}catch(e){alert('Could not save reply: '+e.message)}}
 async function deleteReview(id){if(!confirm('Permanently delete this review?'))return;try{await db.collection('reviews').doc(id).delete()}catch(e){alert('Could not delete review: '+e.message)}}
