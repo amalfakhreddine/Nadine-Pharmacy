@@ -239,6 +239,14 @@ let products=[],trashProducts=[],categories=[],deletedCategories=[],trashSelecte
 let productsVisibleLimit=100,trashVisibleLimit=100,ordersVisibleLimit=100,customersVisibleLimit=100;
 let productSelected=new Set();
 
+let softpharmRows=[];
+let softpharmSelected=new Set();
+let softpharmVisibleLimit=100;
+let softpharmExistingByBarcode=new Map();
+let softpharmExistingByName=new Map();
+let softpharmExistingCount=0;
+
+
 function openCustomerSite(){const url=new URL('index.html',window.location.href);window.open(url.href,'_blank')}const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
 let adminAppStarted=false;
 const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
@@ -402,7 +410,7 @@ function startCatalogListeners(){if(unsubscribeProducts)unsubscribeProducts();if
   products=all.filter(p=>p.active!==false);
   trashProducts=all.filter(p=>p.active===false);
   renderAll();
-},err=>alert('Products could not load: '+err.message));unsubscribeSettings=db.collection('settings').doc('catalog').onSnapshot(doc=>{const data=doc.exists?doc.data():{};categories=Array.isArray(data.categories)?normalizeCategories(data.categories):[];deletedCategories=Array.isArray(data.deletedCategories)?data.deletedCategories.filter(x=>x&&x.name):[];renderAll()},err=>alert('Categories could not load: '+err.message));db.collection('settings').doc('shop').onSnapshot(doc=>{if(doc.exists)shopSettings={...shopSettings,...doc.data()};renderShopSettings()},err=>alert('Shop settings could not load: '+err.message));db.collection('profiles').onSnapshot(s=>{profiles=s.docs.map(d=>({id:d.id,...d.data()}));renderCustomers()},e=>console.warn('Profiles could not load',e));db.collection('settings').doc('adminAccess').onSnapshot(doc=>{const emails=doc.exists&&Array.isArray(doc.data().adminEmails)?doc.data().adminEmails:[];if($('adminEmailSetting'))$('adminEmailSetting').value=(emails.length?emails:[auth.currentUser?.email||'']).filter(Boolean).join('\n')},err=>console.error('Admin access settings could not load',err))}
+},err=>alert('Products could not load: '+err.message));unsubscribeSettings=db.collection('settings').doc('catalog').onSnapshot(doc=>{const data=doc.exists?doc.data():{};categories=Array.isArray(data.categories)?normalizeCategories(data.categories):[];deletedCategories=Array.isArray(data.deletedCategories)?data.deletedCategories.filter(x=>x&&x.name):[];renderAll()},err=>console.error('Categories could not load from Supabase',err));db.collection('settings').doc('shop').onSnapshot(doc=>{if(doc.exists)shopSettings={...shopSettings,...doc.data()};renderShopSettings()},err=>alert('Shop settings could not load: '+err.message));db.collection('profiles').onSnapshot(s=>{profiles=s.docs.map(d=>({id:d.id,...d.data()}));renderCustomers()},e=>console.warn('Profiles could not load',e));db.collection('settings').doc('adminAccess').onSnapshot(doc=>{const emails=doc.exists&&Array.isArray(doc.data().adminEmails)?doc.data().adminEmails:[];if($('adminEmailSetting'))$('adminEmailSetting').value=(emails.length?emails:[auth.currentUser?.email||'']).filter(Boolean).join('\n')},err=>console.error('Admin access settings could not load',err))}
 function normalizeCategories(list){
   const seen=new Set();
   return (list||[])
@@ -1202,6 +1210,12 @@ async function extractSoftPharmPdfRows(data){
   return rows;
 }
 function prepareSoftPharmImporter(){
+  if(!Array.isArray(softpharmRows))softpharmRows=[];
+  if(!(softpharmSelected instanceof Set))softpharmSelected=new Set();
+  if(!(softpharmExistingByBarcode instanceof Map))softpharmExistingByBarcode=new Map();
+  if(!(softpharmExistingByName instanceof Map))softpharmExistingByName=new Map();
+  if(!Number.isFinite(Number(softpharmVisibleLimit))||Number(softpharmVisibleLimit)<100)softpharmVisibleLimit=100;
+
   buildSoftPharmExistingIndex();
   recalcSoftPharmExistingCount();
 
@@ -1211,11 +1225,6 @@ function prepareSoftPharmImporter(){
 
   const area=$('softpharmImportArea');
   if(area)area.style.display=softpharmRows.length?'block':'none';
-
-  const search=$('softpharmSearch');
-  if(search&&typeof search.value!=='string')search.value='';
-
-  softpharmVisibleLimit=Math.max(100,Number(softpharmVisibleLimit)||100);
 }
 
 async function processSoftPharmFile(file){
