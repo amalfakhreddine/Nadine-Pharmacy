@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Product | Nadine Parapharm</title>
+<link rel="icon" href="favicon-32.png">
+<style>
+:root{--g:#126a43;--g2:#eaf5ef;--text:#173126;--muted:#6e7e76;--line:#dde7e1;--danger:#b94040}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;color:var(--text);background:#f8fbf9}button{font:inherit}
+header{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:18px;padding:14px max(18px,5vw)}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:900}.logo img{width:46px;height:46px;object-fit:contain}
+.spacer{flex:1}.header-btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 15px;font-weight:800;cursor:pointer;text-decoration:none;color:var(--text)}
+.header-btn.primary{background:var(--g);color:#fff;border-color:var(--g)}
+main{max-width:1180px;margin:0 auto;padding:30px 20px 60px}
+.breadcrumb{color:var(--muted);font-size:14px;margin-bottom:18px}.breadcrumb a{color:var(--g);text-decoration:none;font-weight:700}
+.product-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.85fr);gap:42px;align-items:start}
+.gallery{background:#fff;border:1px solid var(--line);border-radius:22px;padding:20px;min-height:460px;display:grid;place-items:center}
+.gallery img{max-width:100%;max-height:520px;object-fit:contain}.fake{height:420px;width:100%;display:grid;place-items:center;background:linear-gradient(135deg,#eef7f2,#fff);border-radius:16px;font-size:34px;font-weight:900;text-align:center;padding:20px}
+.thumbs{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}.thumbs img{width:72px;height:72px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;cursor:pointer}
+.detail-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;position:sticky;top:90px}
+.cat{color:var(--g);font-weight:900;text-transform:uppercase;font-size:12px;letter-spacing:.7px}.title{font-size:32px;line-height:1.12;margin:8px 0 12px}
+.composition{background:var(--g2);border-radius:12px;padding:11px 13px;margin:12px 0;font-size:14px}.description{line-height:1.7;color:#405048}
+.price{font-size:30px;font-weight:950;margin:18px 0}.availability{display:inline-flex;padding:7px 10px;border-radius:999px;background:#e7f6ed;color:var(--g);font-weight:900;font-size:12px}
+.buy{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:16px}.buy button{border:0;border-radius:12px;padding:14px 18px;font-weight:900;cursor:pointer}.add{background:var(--g);color:#fff}.wish{background:#fff;border:1px solid var(--line)!important}
+.trust{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:20px}.trust div{background:#f7faf8;border:1px solid var(--line);border-radius:12px;padding:11px;text-align:center;font-size:12px;font-weight:800}
+.section{margin-top:42px}.section-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:16px}.section h2{margin:0;font-size:24px}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.mini{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;cursor:pointer}.mini .pic{height:150px;display:grid;place-items:center;background:#f7faf8;border-radius:12px;overflow:hidden}.mini .pic img{width:100%;height:100%;object-fit:contain}.mini h3{font-size:15px;margin:10px 0 5px}.mini small{color:var(--muted)}.mini strong{display:block;margin-top:8px}
+.reviews{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px}.review-summary{display:flex;align-items:center;gap:10px;margin-bottom:16px}.stars{color:#e3a400;letter-spacing:1px}.review{border-top:1px solid var(--line);padding:16px 0}.review:first-of-type{border-top:0}.review .meta{font-size:12px;color:var(--muted);margin-top:6px}.verified{color:var(--g);font-weight:800;font-size:12px}.reply{background:#f6faf7;border-radius:10px;padding:10px;margin-top:9px}
+.loading,.error{background:#fff;border:1px solid var(--line);border-radius:18px;padding:35px;text-align:center}.error{color:var(--danger)}
+.toast{position:fixed;right:20px;bottom:20px;background:#173126;color:#fff;padding:12px 16px;border-radius:12px;opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none}.toast.show{opacity:1;transform:none}
+@media(max-width:820px){.product-layout{grid-template-columns:1fr}.detail-card{position:static}.cards{grid-template-columns:repeat(2,1fr)}.trust{grid-template-columns:1fr}.title{font-size:27px}}
+@media(max-width:480px){header{padding:10px 14px}.logo span{display:none}.cards{grid-template-columns:1fr 1fr}.buy{grid-template-columns:1fr}.gallery{min-height:320px}.fake{height:280px}}
+</style>
+</head>
+<body>
+<header>
+  <a class="logo" href="index.html"><img src="nadine-logo.webp" alt="Nadine Parapharm"><span>Nadine Parapharm</span></a>
+  <div class="spacer"></div>
+  <a class="header-btn" href="index.html#shop">← Continue shopping</a>
+  <a class="header-btn primary" href="index.html" id="cartLink">Cart (<span id="cartCount">0</span>)</a>
+</header>
+<main>
+  <div class="breadcrumb"><a href="index.html">Home</a> / <a href="index.html#shop">Shop</a> / <span id="crumb">Product</span></div>
+  <div id="state" class="loading">Loading product…</div>
+  <div id="content" style="display:none">
+    <section class="product-layout">
+      <div>
+        <div class="gallery" id="gallery"></div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+      <aside class="detail-card">
+        <div class="cat" id="category"></div>
+        <h1 class="title" id="name"></h1>
+        <div class="availability" id="availability">IN STOCK</div>
+        <div class="composition" id="composition" style="display:none"></div>
+        <div class="description" id="description"></div>
+        <div class="price" id="price"></div>
+        <div class="buy">
+          <button class="add" id="addBtn">Add to cart</button>
+          <button class="wish" onclick="location.href='index.html'">♡ Keep browsing</button>
+        </div>
+        <div class="trust">
+          <div>🚚 Tripoli delivery</div><div>🏥 Free pickup</div><div>💬 Product guidance</div>
+        </div>
+      </aside>
+    </section>
+    <section class="section" id="relatedSection" style="display:none">
+      <div class="section-head"><div><h2>You may also like</h2><small style="color:var(--muted)">Similar products based on category, name and composition</small></div></div>
+      <div class="cards" id="related"></div>
+    </section>
+    <section class="section" id="routineSection" style="display:none">
+      <div class="section-head"><div><h2>Complete your routine</h2><small style="color:var(--muted)">Useful pairings that complement this type of product</small></div></div>
+      <div class="cards" id="routine"></div>
+    </section>
+    <section class="section">
+      <div class="reviews">
+        <div class="section-head"><h2>Customer reviews</h2></div>
+        <div id="reviewSummary" class="review-summary">Loading reviews…</div>
+        <div id="reviews"></div>
+      </div>
+    </section>
+  </div>
+</main>
+<div class="toast" id="toast">Added to cart</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb=supabase.createClient('https://umaotmgjvzkvsvnsavdu.supabase.co','sb_publishable_n7qbS_7kArsjDDilGkSvqQ_zl40jlkd');
+const $=id=>document.getElementById(id);
+const money=n=>'$'+Number(n||0).toFixed(2);
+const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const productId=new URLSearchParams(location.search).get('id');
+let current=null,sessionUser=null;
+
+function docProduct(row){return row?{id:row.doc_id,...(row.data||{})}:null}
+function inStock(p){return p&&(p.stockUnlimited===true||p.stock==null||p.stock===''||Number(p.stock)>0)}
+function composition(p){return p.genericName||p.activeIngredient||p.meta||''}
+function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
+
+async function getProduct(id){
+  const {data,error}=await sb.from('app_documents').select('*').eq('collection_name','products').eq('doc_id',id).maybeSingle();
+  if(error)throw error;
+  return docProduct(data);
+}
+async function getCandidateProducts(target){
+  const found=[];
+  const pageSize=1000;
+  for(let from=0;from<16000;from+=pageSize){
+    const {data,error}=await sb.from('app_documents').select('*').eq('collection_name','products').range(from,from+pageSize-1);
+    if(error)throw error;
+    const page=(data||[]).map(docProduct).filter(p=>p&&p.active!==false&&String(p.id)!==String(target.id));
+    found.push(...page);
+    if((data||[]).length<pageSize)break;
+    // Stop early when enough good same-category candidates are available.
+    if(found.filter(p=>p.cat===target.cat).length>=24)break;
+  }
+  return found;
+}
+function similarityScore(p,target){
+  let score=0;
+  if(p.cat&&target.cat&&p.cat===target.cat)score+=240;
+  const targetWords=new Set(norm(`${target.name} ${composition(target)}`).split(' ').filter(w=>w.length>2));
+  const words=norm(`${p.name} ${composition(p)}`).split(' ').filter(w=>w.length>2);
+  words.forEach(w=>{if(targetWords.has(w))score+=55});
+  if(norm(p.name).startsWith(norm(target.name).split(' ')[0]||'__'))score+=35;
+  return score;
+}
+function routineScore(p,target){
+  const targetText=norm(`${target.name} ${composition(target)} ${target.cat}`);
+  const text=norm(`${p.name} ${composition(p)} ${p.cat}`);
+  const groups=[
+    [['cleanser','wash','micellar'],['moisturizer','cream','serum','sunscreen','spf']],
+    [['serum','retinol','vitamin c','niacinamide','acid'],['moisturizer','cream','sunscreen','spf','cleanser']],
+    [['shampoo'],['conditioner','mask','serum','oil']],
+    [['conditioner','hair mask'],['shampoo','serum','oil']],
+    [['baby','diaper'],['wipes','cream','lotion','wash']],
+    [['vitamin','supplement'],['magnesium','omega','zinc','vitamin d']],
+    [['toothpaste','oral'],['mouthwash','floss','toothbrush']]
+  ];
+  let score=0;
+  for(const [triggers,pairs] of groups){
+    if(triggers.some(x=>targetText.includes(x))&&pairs.some(x=>text.includes(x)))score+=300;
+  }
+  if(p.cat===target.cat)score+=35;
+  return score;
+}
+function miniCard(p){
+  return `<article class="mini" onclick="location.href='product.html?id=${encodeURIComponent(p.id)}'">
+    <div class="pic">${p.images?.[0]?`<img src="${esc(p.images[0])}" alt="${esc(p.name)}">`:`<div style="font-size:28px">🧴</div>`}</div>
+    <h3>${esc(p.name)}</h3><small>${esc(composition(p)||p.cat||'')}</small><strong>${money(p.price)}</strong>
+  </article>`;
+}
+async function loadReviews(){
+  const {data,error}=await sb.from('app_documents').select('*').eq('collection_name','reviews').range(0,999);
+  if(error){$('reviewSummary').textContent='Reviews could not load.';return}
+  const rows=(data||[]).map(r=>({id:r.doc_id,...(r.data||{})})).filter(r=>String(r.productId)===String(productId)&&r.status==='approved');
+  const avg=rows.length?rows.reduce((sum,r)=>sum+Number(r.rating||0),0)/rows.length:0;
+  $('reviewSummary').innerHTML=rows.length?`<span class="stars">${'★'.repeat(Math.round(avg))}${'☆'.repeat(5-Math.round(avg))}</span><b>${avg.toFixed(1)}</b> from ${rows.length} verified review${rows.length===1?'':'s'}`:'No approved reviews yet — be the first to share your experience after purchase.';
+  $('reviews').innerHTML=rows.slice(0,12).map(r=>`<div class="review">
+    <div><span class="stars">${'★'.repeat(Number(r.rating||0))}${'☆'.repeat(5-Number(r.rating||0))}</span> <span class="verified">✓ Verified purchase</span></div>
+    <b>${esc(r.customerName||'Customer')}</b><div style="margin-top:6px">${esc(r.text||'')}</div>
+    <div class="meta">${r.deliveryRating?`Delivery ${Number(r.deliveryRating)}/5 · `:''}${r.packagingRating?`Packaging ${Number(r.packagingRating)}/5 · `:''}${r.recommend?'Recommends this product':''}</div>
+    ${r.adminReply?`<div class="reply"><b>Nadine Parapharm:</b> ${esc(r.adminReply)}</div>`:''}
+  </div>`).join('');
+}
+async function addToCart(){
+  if(!current||!inStock(current))return;
+  const {data}=await sb.auth.getSession();
+  const uid=data?.session?.user?.id;
+  const key=uid?'nadineCart_user_'+uid:'nadineCart_guest';
+  let cart=[];
+  try{cart=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+  const existing=cart.find(x=>String(x.id)===String(current.id));
+  if(existing)existing.qty=Number(existing.qty||0)+1;
+  else cart.push({id:current.id,name:current.name,price:Number(current.price||0),qty:1,prescriptionRequired:false});
+  localStorage.setItem(key,JSON.stringify(cart));
+  updateCartCount();
+  showToast('Added to cart');
+}
+async function updateCartCount(){
+  const {data}=await sb.auth.getSession();
+  const uid=data?.session?.user?.id;
+  const key=uid?'nadineCart_user_'+uid:'nadineCart_guest';
+  let cart=[];try{cart=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+  $('cartCount').textContent=cart.reduce((s,x)=>s+Number(x.qty||0),0);
+}
+async function init(){
+  if(!productId){$('state').className='error';$('state').textContent='Product not found.';return}
+  try{
+    current=await getProduct(productId);
+    if(!current||current.active===false)throw new Error('This product is no longer available.');
+    document.title=current.name+' | Nadine Parapharm';
+    $('crumb').textContent=current.name;$('name').textContent=current.name;$('category').textContent=current.cat||'para';
+    $('price').textContent=money(current.price);$('availability').textContent=inStock(current)?'IN STOCK':'SOLD OUT';
+    $('availability').style.background=inStock(current)?'#e7f6ed':'#fdeaea';$('availability').style.color=inStock(current)?'var(--g)':'var(--danger)';
+    const comp=composition(current);if(comp){$('composition').style.display='block';$('composition').innerHTML='<b>Composition / details:</b> '+esc(comp)}
+    $('description').textContent=current.description||'Product details are available from Nadine Parapharm. Contact us if you would like help choosing the right option for your needs.';
+    const imgs=current.images||[];
+    $('gallery').innerHTML=imgs[0]?`<img id="mainImage" src="${esc(imgs[0])}" alt="${esc(current.name)}">`:`<div class="fake">${esc(current.name)}</div>`;
+    $('thumbs').innerHTML=imgs.length>1?imgs.map(x=>`<img src="${esc(x)}" onclick="document.getElementById('mainImage').src=this.src" alt="">`).join(''):'';
+    $('addBtn').disabled=!inStock(current);$('addBtn').textContent=inStock(current)?'Add to cart':'Sold out';$('addBtn').onclick=addToCart;
+    $('state').style.display='none';$('content').style.display='block';
+
+    const candidates=await getCandidateProducts(current);
+    const related=candidates.map(p=>({p,score:similarityScore(p,current)})).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,8).map(x=>x.p);
+    if(related.length){$('related').innerHTML=related.slice(0,4).map(miniCard).join('');$('relatedSection').style.display='block'}
+    const relatedIds=new Set(related.map(p=>String(p.id)));
+    const routine=candidates.map(p=>({p,score:routineScore(p,current)})).filter(x=>x.score>80&&!relatedIds.has(String(x.p.id))).sort((a,b)=>b.score-a.score).slice(0,4).map(x=>x.p);
+    if(routine.length){$('routine').innerHTML=routine.map(miniCard).join('');$('routineSection').style.display='block'}
+    await loadReviews();
+    await updateCartCount();
+  }catch(err){
+    console.error(err);$('state').className='error';$('state').textContent=err.message||'Product could not load.';
+  }
+}
+init();
+</script>
+</body>
+</html>
