@@ -1,0 +1,27 @@
+SAFE OLD BACKEND CLEANUP
+
+Do not delete the old project until the Supabase/Vercel build is deployed and tested.
+
+CHECK FIRST
+[ ] Admin email/password login works.
+[ ] Google sign-in works.
+[ ] Products are visible in Admin.
+[ ] The same products are visible on the customer website.
+[ ] Categories work.
+[ ] SoftPharm import works.
+[ ] Trash/delete/restore works.
+[ ] A customer can place a test order.
+[ ] The test order appears in Admin.
+[ ] Customer profiles/reviews/settings you need are present.
+[ ] You have exported any old data you may want to keep.
+
+VERCEL
+Remove any old provider environment variables/secrets after the new deployment works.
+Keep the Supabase variables required by this build.
+
+OLD PROJECT
+If you want a backup, export/download the old database first.
+Then use the old provider's console to delete the project itself. Deleting the old project is irreversible and may remove its database, authentication users, storage files, functions, and notification configuration.
+
+IMPORTANT
+Do not paste or expose private service-account/service-role keys in browser code or public GitHub files.
