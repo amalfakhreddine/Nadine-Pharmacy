@@ -231,7 +231,7 @@ function renderProducts(){
   const head=document.querySelector('#shop .section-head h2');
   const sub=document.querySelector('#shop .section-head div div');
   if(head)head.textContent=rawQ?`Search results for “${rawQ}”`:'Shop products';
-  if(sub)sub.textContent=rawQ?'Best matches are shown first, including product names, ingredients/composition and categories.':'Browse by category or sort by price.';
+  if(sub)sub.textContent=rawQ?'Best matches are shown first, including product names, ingredients/composition and categories.':`Browse by category or sort by price. ${products.length.toLocaleString()} products available.`;
 
   $('products').innerHTML=visible.length?visible.map(customerProductCard).join(''):'<div class="empty">No matching products. Try a shorter name, ingredient/composition, or category.</div>';
   if($('customerResultsNote'))$('customerResultsNote').textContent=arr.length?`Showing ${start+1}–${Math.min(start+visible.length,arr.length)} of ${arr.length} products`:'';
@@ -413,51 +413,98 @@ function syncCustomerSavedItemsToLiveProducts(){
   }catch(e){}
   updateCartCount();updateWishlistCount();
 }
-function applyCustomerProductSnapshot(snap){
-  products=snap.docs
-    .map(d=>{
-      const p={id:d.id,...d.data(),prescriptionRequired:false};
+function applyCustomerProducts(rows){
+  products=(rows||[])
+    .map(r=>{
+      const p=r&&r.data!==undefined?{id:r.doc_id,...(r.data||{})}:r;
+      if(!p)return null;
       const cat=String(p.cat||'').trim();
       if(!cat||/^uncategori[sz]ed$/i.test(cat))p.cat='para';
       return p;
     })
-    .filter(p=>p.active!==false)
+    .filter(p=>p&&p.active!==false)
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+
   syncCustomerSavedItemsToLiveProducts();
+  customerProductPage=1;
   renderCats();renderProducts();renderRecent();
   if($('cartOverlay')?.classList.contains('show'))renderCart();
   if($('wishlistOverlay')?.classList.contains('show'))renderWishlist();
 }
+
+let customerProductsChannel=null;
+let customerProductsRefreshTimer=null;
+
+async function loadAllCustomerProductsDirect(){
+  if(!window.nadineSupabase)return;
+  const rows=[];
+  const pageSize=1000;
+  let from=0;
+
+  while(true){
+    const {data,error}=await window.nadineSupabase
+      .from('app_documents')
+      .select('collection_name,doc_id,data')
+      .eq('collection_name','products')
+      .range(from,from+pageSize-1);
+
+    if(error)throw error;
+
+    const page=data||[];
+    rows.push(...page);
+
+    if(page.length<pageSize)break;
+    from+=pageSize;
+
+    if(from%5000===0)await new Promise(resolve=>setTimeout(resolve,0));
+  }
+
+  applyCustomerProducts(rows);
+}
+
+function scheduleCustomerProductsRefresh(){
+  clearTimeout(customerProductsRefreshTimer);
+  customerProductsRefreshTimer=setTimeout(()=>{
+    loadAllCustomerProductsDirect().catch(err=>console.error('Customer product refresh failed',err));
+  },120);
+}
+
 function startCatalogListeners(){
   if(!firebaseReady)return;
   if(unsubscribeProducts)unsubscribeProducts();
   if(unsubscribeCatalog)unsubscribeCatalog();
   if(unsubscribeShopSettings)unsubscribeShopSettings();
 
-  // IMPORTANT: Never display an old Firestore cache snapshot as the live shop.
-  // The customer catalog only accepts server-confirmed snapshots. If the server
-  // cannot be reached, show an empty catalog rather than deleted/stale products.
-  unsubscribeProducts=db.collection('products').onSnapshot(
-    {includeMetadataChanges:true},
-    snap=>{
-      if(snap.metadata&&snap.metadata.fromCache){
-        // Ignore stale local cache. A server snapshot will follow when available.
-        return;
-      }
-      applyCustomerProductSnapshot(snap);
-    },
-    err=>{
-      console.error('Products could not load from server',err);
-      products=[];
-      syncCustomerSavedItemsToLiveProducts();
-      renderCats();renderProducts();renderRecent();
-      if($('cartOverlay')?.classList.contains('show'))renderCart();
-      if($('wishlistOverlay')?.classList.contains('show'))renderWishlist();
-    }
-  );
+  // Product catalog is loaded DIRECTLY from Supabase.
+  // This guarantees that SoftPharm imports visible in admin are also visible here,
+  // including catalogs larger than the 1,000-row PostgREST default.
+  loadAllCustomerProductsDirect().catch(err=>{
+    console.error('Products could not load directly from Supabase',err);
+    products=[];
+    renderCats();renderProducts();renderRecent();
+  });
 
-  // Immediate server-backed refresh as a fallback to guarantee admin/customer synchronization.
-  db.collection('products').get().then(applyCustomerProductSnapshot).catch(err=>console.error('Initial product refresh failed',err));
+  if(customerProductsChannel){
+    try{window.nadineSupabase.removeChannel(customerProductsChannel)}catch(e){}
+  }
+  customerProductsChannel=window.nadineSupabase
+    .channel('customer-products-direct-'+Math.random())
+    .on('postgres_changes',{
+      event:'*',
+      schema:'public',
+      table:'app_documents',
+      filter:'collection_name=eq.products'
+    },scheduleCustomerProductsRefresh)
+    .subscribe();
+
+  // Keep a cleanup function in the old variable so the rest of the page remains compatible.
+  unsubscribeProducts=()=>{
+    clearTimeout(customerProductsRefreshTimer);
+    if(customerProductsChannel){
+      try{window.nadineSupabase.removeChannel(customerProductsChannel)}catch(e){}
+      customerProductsChannel=null;
+    }
+  };
 
   unsubscribeCatalog=db.collection('settings').doc('catalog').onSnapshot(
     {includeMetadataChanges:true},
