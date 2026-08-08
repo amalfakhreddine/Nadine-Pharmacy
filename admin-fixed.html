@@ -873,6 +873,97 @@ function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&l
 function escapeHtml(v){return esc(v)}
 function escapeAttr(v){return esc(v)}
 function orderAddress(o){return [o.city,o.area,o.street,o.building,o.floor&&('Floor '+o.floor),o.apartment&&('Apartment '+o.apartment)].filter(Boolean).join(', ')}
+
+function openReceipt(orderId){
+  const key=String(orderId||'');
+  const o=orders.find(x=>String(x.id||'')===key||String(x.docId||'')===key);
+  if(!o)return alert('Order not found.');
+
+  const items=Array.isArray(o.items)?o.items:[];
+  const address=orderAddress(o);
+  const isPickup=o.fulfillment==='pickup';
+  const created=formatDateTime(o.createdAt);
+  const status=String(o.status||'New');
+
+  const rows=items.length
+    ? items.map(item=>{
+        const qty=Number(item.qty||item.quantity||0);
+        const price=Number(item.price||0);
+        return `<tr>
+          <td>${esc(item.name||'Product')}</td>
+          <td class="num">${qty}</td>
+          <td class="num">${money(price)}</td>
+          <td class="num"><b>${money(price*qty)}</b></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4" class="muted">No item details available.</td></tr>`;
+
+  const events=[
+    ['Order placed',o.createdAt],
+    ['Preparing',o.preparingAt],
+    [isPickup?'Ready for pickup':'Out for delivery',isPickup?o.readyForPickupAt:o.outForDeliveryAt],
+    [isPickup?'Collected':'Delivered',isPickup?o.collectedAt:o.deliveredAt],
+    ['Cancelled',o.cancelledAt]
+  ].filter(x=>x[1]);
+
+  const timeline=events.length
+    ? events.map(([label,time])=>`<div class="timeline-event"><b>${esc(label)}</b><span>${formatDateTime(time)}</span></div>`).join('')
+    : '<div class="muted">No status history yet.</div>';
+
+  const paper=$('receiptPaper');
+  if(!paper)return alert('Receipt window is unavailable.');
+
+  paper.innerHTML=`
+    <div class="receipt-brand">
+      <div>
+        <div class="receipt-label">Nadine Parapharm</div>
+        <h1>Order Receipt</h1>
+      </div>
+      <div style="text-align:right">
+        <b>Order #${esc(o.id||o.docId||'')}</b>
+        <div class="muted">${esc(created)}</div>
+      </div>
+    </div>
+
+    <div class="receipt-meta-grid">
+      <div class="receipt-box"><small>Customer</small><b>${esc(o.customer||'Customer')}</b><br>${esc(o.customerEmail||'')}</div>
+      <div class="receipt-box"><small>Phone</small>${esc(o.phone||'—')}<br><small style="margin-top:6px">Fulfillment</small>${isPickup?'Parapharmacy pickup':'Tripoli delivery'}</div>
+      <div class="receipt-box"><small>Status</small><b>${esc(status)}</b><br><small style="margin-top:6px">Payment</small>${esc(o.payment||'Cash on delivery')}</div>
+    </div>
+
+    ${!isPickup&&address?`<div class="receipt-box"><small>Delivery address</small>${esc(address)}</div>`:''}
+
+    <div class="receipt-section">
+      <h3>Items</h3>
+      <table class="receipt-items">
+        <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="receipt-totals">
+        <div class="receipt-total-row grand"><span>Total</span><span>${money(o.total||0)}</span></div>
+      </div>
+    </div>
+
+    <div class="receipt-section">
+      <h3>Order timeline</h3>
+      <div class="timeline">${timeline}</div>
+    </div>
+
+    <div class="receipt-note">This receipt reflects the order information stored in Nadine Parapharm.</div>
+  `;
+
+  const overlay=$('receiptOverlay');
+  if(overlay){
+    overlay.classList.add('show');
+    document.body.style.overflow='hidden';
+  }
+}
+function closeReceipt(){
+  const overlay=$('receiptOverlay');
+  if(overlay)overlay.classList.remove('show');
+  document.body.style.overflow='';
+}
+
 function orderCard(o){
   const id=String(o.docId||o.id||'');
   const items=Array.isArray(o.items)?o.items:[];
