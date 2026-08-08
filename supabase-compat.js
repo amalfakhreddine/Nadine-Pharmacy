@@ -60,13 +60,48 @@
     orderBy(k,dir='asc'){return new Query(this.col,this.filters,[k,dir],this.lim)}
     limit(n){return new Query(this.col,this.filters,this.ord,n)}
     async get(){
-      let q=sb.from('app_documents').select('*').eq('collection_name',this.col);
-      const {data,error}=await q;if(error)throw error;
-      let rows=data||[];
-      for(const [k,op,v] of this.filters)rows=rows.filter(r=>op==='=='?r.data?.[k]===v:true);
-      if(this.ord){const [k,d]=this.ord;rows.sort((a,b)=>{const av=a.data?.[k],bv=b.data?.[k];return(d==='desc'?-1:1)*((av>bv)-(av<bv))})}
-      if(this.lim!=null)rows=rows.slice(0,this.lim);
-      return new SnapQuery(rows)
+      // Supabase/PostgREST returns at most 1,000 rows per request by default.
+      // Fetch the collection page-by-page so large SoftPharm catalogs (16k+)
+      // are fully loaded, then apply the Firebase-style filters/sort/limit locally.
+      const rows=[];
+      const pageSize=1000;
+      let from=0;
+
+      while(true){
+        const to=from+pageSize-1;
+        const {data,error}=await sb
+          .from('app_documents')
+          .select('*')
+          .eq('collection_name',this.col)
+          .range(from,to);
+
+        if(error)throw error;
+
+        const page=data||[];
+        rows.push(...page);
+
+        if(page.length<pageSize)break;
+        from+=pageSize;
+
+        // Yield occasionally so a 16k+ catalog does not lock the browser.
+        if(from%5000===0)await new Promise(resolve=>setTimeout(resolve,0));
+      }
+
+      let filtered=rows;
+      for(const [k,op,v] of this.filters){
+        filtered=filtered.filter(r=>op==='=='?r.data?.[k]===v:true);
+      }
+
+      if(this.ord){
+        const [k,d]=this.ord;
+        filtered.sort((a,b)=>{
+          const av=a.data?.[k],bv=b.data?.[k];
+          return(d==='desc'?-1:1)*((av>bv)-(av<bv));
+        });
+      }
+
+      if(this.lim!=null)filtered=filtered.slice(0,this.lim);
+      return new SnapQuery(filtered);
     }
     onSnapshot(optionsOrOk,okOrFail,maybeFail){
       const ok=typeof optionsOrOk==='function'?optionsOrOk:okOrFail;

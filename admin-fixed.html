@@ -161,7 +161,7 @@ body:has(#shell.show) #login{display:none!important;}
 <section class="panel" id="panel-reviews"><div class="heading"><div><h1>Reviews</h1><div class="muted">Approve verified reviews, see who submitted them and reply publicly.</div></div></div><div class="review-kpis" id="reviewKpis"></div><div class="card"><div class="data-toolbar"><input id="reviewSearch" placeholder="Search customer, product or review…" oninput="renderAdminReviews()"><select id="reviewStatus" onchange="renderAdminReviews()"><option value="all">All statuses</option><option value="pending">Pending approval</option><option value="approved">Approved</option><option value="hidden">Hidden</option></select><select id="reviewStars" onchange="renderAdminReviews()"><option value="all">All ratings</option><option value="5">5 stars</option><option value="4">4 stars</option><option value="3">3 stars</option><option value="2">2 stars</option><option value="1">1 star</option></select></div><div id="adminReviewList"></div></div></section>
 <section class="panel" id="panel-activity"><div class="heading"><div><h1>Inventory Activity</h1><div class="muted">Track product creation, edits, stock changes, restores and deletions.</div></div><button class="secondary" onclick="loadAuditLogs()">↻ Refresh</button></div><div class="card"><div id="activityList"><div class="muted">Loading activity…</div></div></div></section>
 <section class="panel" id="panel-categories"><div class="heading"><div><h1>Categories</h1><div class="muted">Add or remove shop categories.</div></div></div><div class="card"><div class="row-actions"><input id="newCategory" placeholder="New category name" style="border:1px solid var(--line);border-radius:10px;padding:10px"><button class="save" onclick="addCategory()">Add category</button></div><div id="categoryList" style="margin-top:16px"></div></div></section>
-<section class="panel" id="panel-trash"><div class="heading"><div><h1>Trash</h1><div class="muted">Deleted products and categories stay here until restored or permanently removed.</div></div></div><div class="card"><div class="trash-toolbar"><select id="trashTypeFilter" onchange="trashVisibleLimit=100;renderTrash()"><option value="all">All deleted items</option><option value="products">Products only</option><option value="categories">Categories only</option></select><button class="secondary" type="button" onclick="selectAllTrashVisible()">Select all visible</button><button class="secondary" type="button" onclick="clearTrashSelection()">Clear selection</button><span class="trash-bulk-count" id="trashSelectedCount">0 selected</span><span class="spacer"></span><button class="secondary" type="button" onclick="restoreSelectedTrash()">Restore selected</button><button class="danger" type="button" onclick="deleteSelectedTrashForever()">Delete selected forever</button><button class="danger" type="button" onclick="deleteAllTrashForever()">Delete all</button></div><div class="table-wrap"><table class="table"><thead><tr><th><input class="trash-select" type="checkbox" id="trashSelectAll" onchange="toggleAllTrashVisible(this.checked)" aria-label="Select all visible trash items"></th><th>Item</th><th>Type / Category</th><th>Price</th><th>Qty</th><th>Deleted</th><th>Actions</th></tr></thead><tbody id="trashRows"></tbody></table></div>
+<section class="panel" id="panel-trash"><div class="heading"><div><h1>Trash</h1><div class="muted">Deleted products and categories stay here until restored or permanently removed. Restoring a deleted category also restores all products that were deleted with it.</div></div></div><div class="card"><div class="trash-toolbar"><select id="trashTypeFilter" onchange="trashVisibleLimit=100;renderTrash()"><option value="all">All deleted items</option><option value="products">Products only</option><option value="categories">Categories only</option></select><button class="secondary" type="button" onclick="selectAllTrashVisible()">Select all visible</button><button class="secondary" type="button" onclick="clearTrashSelection()">Clear selection</button><span class="trash-bulk-count" id="trashSelectedCount">0 selected</span><span class="spacer"></span><button class="secondary" type="button" onclick="restoreSelectedTrash()">Restore selected</button><button class="danger" type="button" onclick="deleteSelectedTrashForever()">Delete selected forever</button><button class="danger" type="button" onclick="deleteAllTrashForever()">Delete all</button></div><div class="table-wrap"><table class="table"><thead><tr><th><input class="trash-select" type="checkbox" id="trashSelectAll" onchange="toggleAllTrashVisible(this.checked)" aria-label="Select all visible trash items"></th><th>Item</th><th>Type / Category</th><th>Price</th><th>Qty</th><th>Deleted</th><th>Actions</th></tr></thead><tbody id="trashRows"></tbody></table></div>
 <div class="import-load-more" style="margin-top:14px">
   <span class="note" id="trashVisibleCount"></span>
   <button class="secondary" id="trashLoadMoreBtn" type="button" onclick="trashVisibleLimit+=100;renderTrash()">Show 100 more</button>
@@ -217,7 +217,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. All imported products are placed in the <b>para</b> category. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode</span></div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. All imported products are placed in the <b>para</b> category. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
     </div>
   </div>
 </section>
@@ -718,8 +718,76 @@ function showUndoSnackbar(id,name){undoProductId=String(id);const bar=$('undoSna
 async function undoLastDelete(){if(!undoProductId)return;const id=undoProductId;undoProductId=null;if(undoTimer){clearInterval(undoTimer);undoTimer=null}$('undoSnackbar')?.classList.remove('show');await restoreProduct(id,false)}
 async function restoreProduct(id,ask=true){const p=trashProducts.find(x=>String(x.id)===String(id));if(!p)return;if(ask&&!confirm(`Restore ${p.name||'this product'} to the customer website?`))return;try{await db.collection('products').doc(String(id)).set({active:true,deletedAt:firebase.firestore.FieldValue.delete(),deletedBy:firebase.firestore.FieldValue.delete(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});trashSelected.delete(trashKey('product',id));await writeAudit('Product restored from Trash',{...p,active:true},p)}catch(err){alert('Could not restore product: '+err.message)}}
 async function permanentlyDeleteProduct(id,ask=true){const p=trashProducts.find(x=>String(x.id)===String(id));if(!p)return;if(ask&&!confirm(`Permanently delete ${p.name||'this product'}? This cannot be undone.`))return;try{await db.collection('products').doc(String(id)).delete();trashSelected.delete(trashKey('product',id));await writeAudit('Product permanently deleted',p,p)}catch(err){alert('Could not permanently delete product: '+err.message)}}
-async function restoreCategory(name,ask=true){const c=deletedCategories.find(x=>String(x.name)===String(name));if(!c)return;if(ask&&!confirm(`Restore the category “${name}”?`))return;try{const nextCategories=normalizeCategories([...categories,name]),nextDeleted=deletedCategories.filter(x=>String(x.name)!==String(name));const batch=db.batch();for(const id of (c.productIds||[])){batch.set(db.collection('products').doc(String(id)),{cat:name,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true})}batch.set(db.collection('settings').doc('catalog'),{categories:nextCategories,deletedCategories:nextDeleted,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});await batch.commit();trashSelected.delete(trashKey('category',name))}catch(err){alert('Could not restore category: '+err.message)}}
-async function permanentlyDeleteCategory(name,ask=true){const c=deletedCategories.find(x=>String(x.name)===String(name));if(!c)return;if(ask&&!confirm(`Permanently delete the category “${name}”? This cannot be undone.`))return;try{await saveCategories(categories,deletedCategories.filter(x=>String(x.name)!==String(name)));trashSelected.delete(trashKey('category',name))}catch(err){alert('Could not permanently delete category: '+err.message)}}
+async function restoreCategory(name,ask=true){
+  const c=deletedCategories.find(x=>String(x.name)===String(name));
+  if(!c)return;
+  const ids=(c.productIds||[]).map(String);
+  if(ask&&!confirm(`Restore the category “${name}”${ids.length?` and all ${ids.length} product(s) inside it`:''}?`))return;
+
+  try{
+    const nextCategories=normalizeCategories([...categories,name]);
+    const nextDeleted=deletedCategories.filter(x=>String(x.name)!==String(name));
+
+    // Restore every product linked to this deleted category.
+    for(let i=0;i<ids.length;i+=100){
+      const chunk=ids.slice(i,i+100);
+      await Promise.all(chunk.map(id=>db.collection('products').doc(id).set({
+        cat:name,
+        active:true,
+        deletedAt:firebase.firestore.FieldValue.delete(),
+        deletedBy:firebase.firestore.FieldValue.delete(),
+        deletedWithCategory:firebase.firestore.FieldValue.delete(),
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      },{merge:true})));
+      await yieldToBrowser();
+    }
+
+    await db.collection('settings').doc('catalog').set({
+      categories:nextCategories,
+      deletedCategories:nextDeleted,
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true});
+
+    // Remove restored product/category selections from Trash UI.
+    trashSelected.delete(trashKey('category',name));
+    ids.forEach(id=>trashSelected.delete(trashKey('product',id)));
+    trashVisibleLimit=100;
+  }catch(err){
+    console.error('Could not restore category and products',err);
+    alert('Could not restore category: '+(err?.message||err));
+  }
+}
+
+async function permanentlyDeleteCategory(name,ask=true){
+  const c=deletedCategories.find(x=>String(x.name)===String(name));
+  if(!c)return;
+  const ids=(c.productIds||[]).map(String);
+  const wording=ids.length
+    ? `Permanently delete the category “${name}” and its ${ids.length} linked product(s)? This cannot be undone.`
+    : `Permanently delete the category “${name}”? This cannot be undone.`;
+  if(ask&&!confirm(wording))return;
+
+  try{
+    // Permanently remove all products that were deleted together with this category.
+    for(let i=0;i<ids.length;i+=100){
+      const chunk=ids.slice(i,i+100);
+      await Promise.all(chunk.map(id=>db.collection('products').doc(id).delete()));
+      await yieldToBrowser();
+    }
+
+    await saveCategories(
+      categories.filter(x=>String(x)!==String(name)),
+      deletedCategories.filter(x=>String(x.name)!==String(name))
+    );
+
+    trashSelected.delete(trashKey('category',name));
+    ids.forEach(id=>trashSelected.delete(trashKey('product',id)));
+  }catch(err){
+    console.error('Could not permanently delete category and products',err);
+    alert('Could not permanently delete category: '+(err?.message||err));
+  }
+}
+
 async function restoreSelectedTrash(){const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');if(!confirm(`Restore ${items.length} selected item(s)?`))return;for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')await restoreProduct(id,false);else if(type==='category')await restoreCategory(id,false)}clearTrashSelection()}
 async function deleteSelectedTrashForever(){const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');if(!confirm(`Permanently delete ${items.length} selected item(s)? This cannot be undone.`))return;for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')await permanentlyDeleteProduct(id,false);else if(type==='category')await permanentlyDeleteCategory(id,false)}clearTrashSelection()}
 async function deleteAllTrashForever(){
@@ -858,7 +926,51 @@ function exportInventoryXlsx(){sheetDownload(products.map(p=>({Product:p.name,Br
 function exportCustomersXlsx(){sheetDownload(customerDataset().map(c=>({Name:c.name,Email:c.email,Phone:c.phone,Orders:c.orders,TotalSpent:c.spent,LastOrder:c.last?c.last.toISOString():''})),'nadine-parapharm-customers.xlsx')}
 function renderCategories(){$('categoryList').innerHTML=categories.length?categories.map(c=>`<div class="cat-row"><b>${esc(c)}</b><button class="danger" onclick="removeCategory('${escapeAttr(c)}')">Move to Trash</button></div>`).join(''):'<div class="muted">No categories yet.</div>'}
 async function addCategory(){let c=$('newCategory').value.trim();if(!c)return;if(categories.some(x=>x.toLowerCase()===c.toLowerCase()))return alert('Category already exists.');try{await saveCategories([...categories,c]);$('newCategory').value=''}catch(err){alert('Could not add category: '+err.message)}}
-async function removeCategory(c){const affected=products.filter(p=>String(p.cat||'')===c);const message=affected.length?`Move this category to Trash? ${affected.length} product(s) will be moved to para until the category is restored.`:'Move this category to Trash?';if(!confirm(message))return;try{const deletedEntry={name:c,deletedAt:new Date().toISOString(),deletedBy:auth.currentUser?.email||'',productIds:affected.map(p=>String(p.id))};const nextDeleted=[...deletedCategories.filter(x=>String(x.name).toLowerCase()!==String(c).toLowerCase()),deletedEntry];const batch=db.batch();affected.forEach(p=>batch.update(db.collection('products').doc(String(p.id)),{cat:'para',updatedAt:firebase.firestore.FieldValue.serverTimestamp()}));batch.set(db.collection('settings').doc('catalog'),{categories:normalizeCategories(categories.filter(x=>x!==c)),deletedCategories:nextDeleted,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});await batch.commit()}catch(err){alert('Could not move category to Trash: '+err.message)}}
+async function removeCategory(c){
+  const affected=products.filter(p=>String(p.cat||'')===String(c));
+  const message=affected.length
+    ? `Move the category “${c}” and all ${affected.length} product(s) inside it to Trash? You can restore the category later and all of its products will come back.`
+    : `Move the category “${c}” to Trash?`;
+  if(!confirm(message))return;
+
+  try{
+    const productIds=affected.map(p=>String(p.id));
+    const deletedEntry={
+      name:c,
+      deletedAt:new Date().toISOString(),
+      deletedBy:auth.currentUser?.email||'',
+      productIds
+    };
+    const nextDeleted=[
+      ...deletedCategories.filter(x=>String(x.name).toLowerCase()!==String(c).toLowerCase()),
+      deletedEntry
+    ];
+
+    // Move every product in this category to Trash in chunks so large categories stay responsive.
+    for(let i=0;i<productIds.length;i+=100){
+      const chunk=productIds.slice(i,i+100);
+      await Promise.all(chunk.map(id=>db.collection('products').doc(id).set({
+        active:false,
+        deletedAt:firebase.firestore.FieldValue.serverTimestamp(),
+        deletedBy:auth.currentUser?.email||'',
+        deletedWithCategory:c,
+        updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      },{merge:true})));
+      await yieldToBrowser();
+    }
+
+    await db.collection('settings').doc('catalog').set({
+      categories:normalizeCategories(categories.filter(x=>String(x)!==String(c))),
+      deletedCategories:nextDeleted,
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true});
+
+  }catch(err){
+    console.error('Could not move category and products to Trash',err);
+    alert('Could not move category to Trash: '+(err?.message||err));
+  }
+}
+
 async function loadAdminProfile(){const user=auth.currentUser;if(!user)return;let data={};try{const doc=await db.collection('settings').doc('adminProfile').get();data=doc.exists?doc.data():{}}catch(err){console.error('Admin profile could not load',err)}const name=data.fullName||'Nadine Parapharm Admin';if($('adminProfileName')){$('adminProfileName').value=name;$('adminProfileEmail').value=user.email||'';$('adminProfilePhone').value=data.phone||'';$('adminProfileTitle').value=data.title||'Parapharmacy administrator';$('adminCardName').textContent=name;$('adminCardEmail').textContent=user.email||'';$('adminAvatar').textContent=(name[0]||'A').toUpperCase();$('adminLastSignIn').textContent=user.metadata?.lastSignInTime?new Date(user.metadata.lastSignInTime).toLocaleString():'—'}}
 async function saveAdminProfile(){const user=auth.currentUser;if(!user)return;const name=$('adminProfileName').value.trim(),msg=$('adminProfileMessage');if(!name){msg.textContent='Enter a display name.';return}const data={fullName:name,phone:$('adminProfilePhone').value.trim(),title:$('adminProfileTitle').value.trim()||'Parapharmacy administrator',role:'admin',updatedBy:user.email||user.uid,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};try{await db.collection('settings').doc('adminProfile').set(data,{merge:true});msg.style.color='var(--g)';msg.textContent='Shared admin profile saved. All authorised admins will see these details.';loadAdminProfile()}catch(err){msg.style.color='var(--danger)';msg.textContent='Could not save profile: '+err.message}}
 function renderShopSettings(){if(!$('deliveryFeeSetting'))return;$('deliveryFeeSetting').value=Number(shopSettings.deliveryFee??3);$('freeDeliverySetting').value=Number(shopSettings.freeDeliveryThreshold??25);$('deliveryEnabledSetting').checked=shopSettings.deliveryEnabled!==false;$('pickupEnabledSetting').checked=shopSettings.pickupEnabled!==false}async function saveShopSettings(){const data={deliveryFee:Math.max(0,Number($('deliveryFeeSetting').value)||0),freeDeliveryThreshold:Math.max(0,Number($('freeDeliverySetting').value)||0),deliveryEnabled:$('deliveryEnabledSetting').checked,pickupEnabled:$('pickupEnabledSetting').checked,deliveryCity:'Tripoli',updatedAt:firebase.firestore.FieldValue.serverTimestamp()};try{await db.collection('settings').doc('shop').set(data,{merge:true});$('shopSettingsMessage').textContent='Checkout settings saved.'}catch(err){$('shopSettingsMessage').textContent='Could not save: '+err.message}}async function deleteOrder(id){if(!confirm('Permanently delete this order? Use this mainly for test orders.'))return;try{await db.collection('orders').doc(id).delete()}catch(err){alert('Could not delete order: '+err.message)}}
