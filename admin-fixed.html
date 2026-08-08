@@ -1201,6 +1201,23 @@ async function extractSoftPharmPdfRows(data){
   }
   return rows;
 }
+function prepareSoftPharmImporter(){
+  buildSoftPharmExistingIndex();
+  recalcSoftPharmExistingCount();
+
+  if($('importRowsFound'))$('importRowsFound').textContent=String(softpharmRows.length);
+  if($('importSelectedCount'))$('importSelectedCount').textContent=String(softpharmSelected.size);
+  if($('importExistingCount'))$('importExistingCount').textContent=String(softpharmExistingCount);
+
+  const area=$('softpharmImportArea');
+  if(area)area.style.display=softpharmRows.length?'block':'none';
+
+  const search=$('softpharmSearch');
+  if(search&&typeof search.value!=='string')search.value='';
+
+  softpharmVisibleLimit=Math.max(100,Number(softpharmVisibleLimit)||100);
+}
+
 async function processSoftPharmFile(file){
   if(!file)return;
   const valid=/\.(xlsx|xls|csv|pdf)$/i.test(file.name||'')||file.type==='application/pdf';
