@@ -58,7 +58,7 @@ main{max-width:1180px;margin:0 auto;padding:30px 20px 60px}
         <div class="price" id="price"></div>
         <div class="buy">
           <button class="add" id="addBtn">Add to cart</button>
-          <button class="wish" onclick="location.href='index.html'">♡ Keep browsing</button>
+          <button class="wish" id="wishBtn" type="button">♡ Add to wishlist</button>
         </div>
         <div class="trust">
           <div>🚚 Tripoli delivery</div><div>🏥 Free pickup</div><div>💬 Product guidance</div>
@@ -185,6 +185,51 @@ async function updateCartCount(){
   let cart=[];try{cart=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
   $('cartCount').textContent=cart.reduce((s,x)=>s+Number(x.qty||0),0);
 }
+
+async function wishlistContext(){
+  const {data}=await sb.auth.getSession();
+  const user=data?.session?.user||null;
+  const key=user?'nadineWishlist_user_'+user.id:'nadineWishlist_guest';
+  let items=[];
+  try{items=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+  if(!Array.isArray(items))items=[];
+  return {user,key,items:[...new Set(items.map(String))]};
+}
+async function refreshWishlistButton(){
+  if(!current)return;
+  const ctx=await wishlistContext();
+  const saved=ctx.items.includes(String(current.id));
+  const btn=$('wishBtn');
+  if(btn){
+    btn.textContent=saved?'♥ In wishlist':'♡ Add to wishlist';
+    btn.setAttribute('aria-pressed',saved?'true':'false');
+  }
+}
+async function toggleProductWishlist(){
+  if(!current)return;
+  const ctx=await wishlistContext();
+  const id=String(current.id);
+  const exists=ctx.items.includes(id);
+  const items=exists?ctx.items.filter(x=>x!==id):[...ctx.items,id];
+  localStorage.setItem(ctx.key,JSON.stringify(items));
+
+  if(ctx.user){
+    try{
+      const {error}=await sb.from('app_documents').upsert({
+        collection_name:'wishlists',
+        doc_id:ctx.user.id,
+        data:{items,updatedAt:new Date().toISOString()},
+        updated_at:new Date().toISOString()
+      },{onConflict:'collection_name,doc_id'});
+      if(error)throw error;
+    }catch(err){
+      console.warn('Wishlist cloud sync failed',err);
+    }
+  }
+  await refreshWishlistButton();
+  showToast(exists?'Removed from wishlist':'Added to wishlist');
+}
+
 async function init(){
   if(!productId){$('state').className='error';$('state').textContent='Product not found.';return}
   try{
@@ -199,7 +244,7 @@ async function init(){
     const imgs=current.images||[];
     $('gallery').innerHTML=imgs[0]?`<img id="mainImage" src="${esc(imgs[0])}" alt="${esc(current.name)}">`:`<div class="fake">${esc(current.name)}</div>`;
     $('thumbs').innerHTML=imgs.length>1?imgs.map(x=>`<img src="${esc(x)}" onclick="document.getElementById('mainImage').src=this.src" alt="">`).join(''):'';
-    $('addBtn').disabled=!inStock(current);$('addBtn').textContent=inStock(current)?'Add to cart':'Sold out';$('addBtn').onclick=addToCart;
+    $('addBtn').disabled=!inStock(current);$('addBtn').textContent=inStock(current)?'Add to cart':'Sold out';$('addBtn').onclick=addToCart;$('wishBtn').onclick=toggleProductWishlist;await refreshWishlistButton();
     $('state').style.display='none';$('content').style.display='block';
 
     const candidates=await getCandidateProducts(current);
