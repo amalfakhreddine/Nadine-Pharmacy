@@ -339,7 +339,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. Categories are detected automatically using the keyword groups above; unmatched products use <b>para</b>. Duplicate products already on the website are removed from the import automatically and you get a notification. Existing products are left unchanged. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. Categories are detected automatically using the keyword groups above; unmatched products use <b>para</b>. Products that already exist on the website are detected by name/barcode and never duplicated. You get a notification and, if selected, you can choose whether to update them or keep the existing version unchanged. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
     </div>
   </div>
 </section>
@@ -1555,16 +1555,18 @@ async function processSoftPharmFile(file){
       rawRows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
     }
     softpharmRows=await mapSoftPharmRowsInChunks(rawRows,500);
-    // Remove duplicates automatically: first against products already in the website, then repeated rows inside this file.
+    // Keep products that already exist so the admin can choose whether to update them.
+    // Only repeated rows inside the uploaded file are removed automatically.
     buildSoftPharmExistingIndex();
-    const seenImport=new Set(); let removedExisting=0, removedInFile=0;
-    softpharmRows=softpharmRows.filter(r=>{const existing=getExistingImportProduct(r);if(existing){removedExisting++;return false}const identity=(r.barcode?'b:'+normalizeImportKey(r.barcode):(r.code?'c:'+normalizeImportKey(r.code):'n:'+normalizeImportKey(r.name)));if(seenImport.has(identity)){removedInFile++;return false}seenImport.add(identity);return true});
-    const removedDuplicates=removedExisting+removedInFile;
+    const seenImport=new Set(); let removedInFile=0;
+    softpharmRows=softpharmRows.filter(r=>{const identity=(r.barcode?'b:'+normalizeImportKey(r.barcode):(r.code?'c:'+normalizeImportKey(r.code):'n:'+normalizeImportKey(r.name)));if(seenImport.has(identity)){removedInFile++;return false}seenImport.add(identity);return true});
+    const existingMatches=softpharmRows.filter(r=>getExistingImportProduct(r)).length;
+
     softpharmSelected=new Set();
     softpharmVisibleLimit=100;
     buildSoftPharmExistingIndex();
     recalcSoftPharmExistingCount();
-    $('softpharmFileName').textContent=file.name+' — '+softpharmRows.length+' unique product rows found';const dupNotice=$('softpharmDuplicateNotice');if(dupNotice){if(removedDuplicates){dupNotice.style.display='block';dupNotice.textContent=`⚠ ${removedDuplicates} duplicate item(s) were removed automatically (${removedExisting} already on the website${removedInFile?`, ${removedInFile} repeated in this file`:''}).`;}else{dupNotice.style.display='none';dupNotice.textContent='';}}if(removedDuplicates)alert(`${removedDuplicates} duplicate item(s) were found and removed automatically. They will not be imported again.`);
+    $('softpharmFileName').textContent=file.name+' — '+softpharmRows.length+' product rows found';const dupNotice=$('softpharmDuplicateNotice');if(dupNotice){const notes=[];if(existingMatches)notes.push(`${existingMatches} item(s) already exist on the website and can be updated`);if(removedInFile)notes.push(`${removedInFile} repeated row(s) inside this file were removed`);if(notes.length){dupNotice.style.display='block';dupNotice.textContent='⚠ '+notes.join('. ')+'.';}else{dupNotice.style.display='none';dupNotice.textContent='';}}if(existingMatches)alert(`${existingMatches} item(s) in this file are already on the website. They will NOT be duplicated. If you select them during import, you will be asked whether you want to update them.`);if(removedInFile)alert(`${removedInFile} repeated row(s) inside this file were removed automatically.`);
     $('softpharmImportArea').style.display='block';
     $('softpharmSearch').value='';
     prepareSoftPharmImporter();
@@ -1601,7 +1603,7 @@ function renderSoftPharmPreview(){
   body.innerHTML=rows.length?rows.map(r=>{
     const existing=getExistingImportProduct(r);
     const keywordMatch=selectedSoftPharmKeywordGroup()&&keywordGroupMatchesName(selectedSoftPharmKeywordGroup(),r.name);
-    return `<tr class="${existing?'import-existing':''} ${keywordMatch?'keyword-match':''}"><td><input type="checkbox" ${softpharmSelected.has(r.key)?'checked':''} onchange="toggleSoftPharmRow('${r.key}',this.checked)"></td><td><b>${escapeHtml(r.name)}</b></td><td>${escapeHtml(r.barcode||'—')}</td><td>${escapeHtml(r.category||'para')}</td><td>${money(r.price)}</td><td>${existing?'Will update':'New product'}</td></tr>`;
+    return `<tr class="${existing?'import-existing':''} ${keywordMatch?'keyword-match':''}"><td><input type="checkbox" ${softpharmSelected.has(r.key)?'checked':''} onchange="toggleSoftPharmRow('${r.key}',this.checked)"></td><td><b>${escapeHtml(r.name)}</b></td><td>${escapeHtml(r.barcode||'—')}</td><td>${escapeHtml(r.category||'para')}</td><td>${money(r.price)}</td><td>${existing?'Already exists — update optional':'New product'}</td></tr>`;
   }).join(''):'<tr><td colspan="6" class="muted">No matching products.</td></tr>';
   $('importRowsFound').textContent=String(softpharmRows.length);
   $('importSelectedCount').textContent=String(softpharmSelected.size);
@@ -1650,12 +1652,27 @@ async function importSelectedSoftPharmProducts(){
     if(i&&i%5000===0)await yieldToBrowser();
   }
   if(!selected.length)return alert('Select at least one product first.');
-  if(!confirm(`Import ${selected.length} selected unique product(s)? Duplicate products have already been removed.`))return;
+
+  const existingSelected=selected.filter(r=>getExistingImportProduct(r));
+  const newSelected=selected.filter(r=>!getExistingImportProduct(r));
+  let updateExisting=false;
+  if(existingSelected.length){
+    updateExisting=confirm(`${existingSelected.length} selected item(s) already exist on the website.
+
+Do you want to UPDATE them with the latest data from this file?
+
+OK = Update existing items
+Cancel = Keep existing items unchanged`);
+  }
+  const actionSummary=`${newSelected.length} new product(s)`+(existingSelected.length?(updateExisting?` + ${existingSelected.length} update(s)`:`; ${existingSelected.length} existing item(s) will be skipped`):'');
+  if(!confirm(`Continue with import?
+
+${actionSummary}`))return;
+
   const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing…';
   try{
-    // Keep every SoftPharm import in the single shared 'para' category.
     const mergedCategories=normalizeCategories([...categories,'para',...selected.map(resolveImportCategory)]);
-    let batch=db.batch(),ops=0,done=0,created=0,updated=0;
+    let batch=db.batch(),ops=0,done=0,created=0,updated=0,skipped=0;
     batch.set(db.collection('settings').doc('catalog'),{
       categories:mergedCategories,
       updatedAt:sbFieldValue.serverTimestamp()
@@ -1663,25 +1680,28 @@ async function importSelectedSoftPharmProducts(){
     ops++;
     for(const row of selected){
       const existing=getExistingImportProduct(row);
-      if(existing){updated++;continue;}
-      const ref=db.collection('products').doc();
+      if(existing&&!updateExisting){skipped++;continue;}
+      const ref=existing?db.collection('products').doc(existing.id):db.collection('products').doc();
       const data={
-        name:row.name,barcode:row.barcode||'',cat:resolveImportCategory(row),subcategory:resolveImportCategory(row)==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):'',medicalDeviceSubcategory:resolveImportCategory(row)==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):'',
-        price:Number(row.price||0),stock:row.stockDefined?Number(row.stock||0):999999,active:true,prescriptionRequired:false,
-        importSource:'SoftPharm file',softpharmCode:row.code||'',updatedAt:sbFieldValue.serverTimestamp()
+        name:row.name,barcode:row.barcode||existing?.barcode||'',cat:(existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row)),
+        subcategory:((existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row))==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):''),
+        medicalDeviceSubcategory:((existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row))==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):''),
+        price:Number(row.price||0),stock:row.stockDefined?Number(row.stock||0):(existing?Number(existing.stock??999999):999999),active:true,prescriptionRequired:existing?.prescriptionRequired||false,
+        importSource:'SoftPharm file',softpharmCode:row.code||existing?.softpharmCode||'',updatedAt:sbFieldValue.serverTimestamp()
       };
-      if(!existing){Object.assign(data,{genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:sbFieldValue.serverTimestamp()});created++}else updated++;
+      if(!existing){Object.assign(data,{genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:sbFieldValue.serverTimestamp()});created++;}
+      else updated++;
       batch.set(ref,data,{merge:true});ops++;done++;
       if(ops>=300){
         await batch.commit();
         batch=db.batch();ops=0;
-        progress.textContent=`Imported ${done.toLocaleString()} / ${selected.length.toLocaleString()} products…`;
+        progress.textContent=`Processed ${done.toLocaleString()} / ${selected.length.toLocaleString()} products…`;
         await yieldToBrowser();
       }
     }
     if(ops){await batch.commit();await yieldToBrowser();}
-    progress.textContent=`Done: ${created} new product(s) imported${updated?`, ${updated} duplicate(s) skipped`:''}.`;
-    alert(`Import complete. ${created} new product(s) added${updated?` and ${updated} duplicate(s) skipped`:''}.`);
+    progress.textContent=`Done: ${created} new, ${updated} updated${skipped?`, ${skipped} existing skipped`:''}.`;
+    alert(`Import complete. ${created} new product(s) added, ${updated} existing product(s) updated${skipped?`, and ${skipped} existing product(s) kept unchanged`:''}. No duplicates were created.`);
     softpharmSelected.clear();
     buildSoftPharmExistingIndex();
     recalcSoftPharmExistingCount();
