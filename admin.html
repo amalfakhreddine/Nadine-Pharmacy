@@ -240,6 +240,7 @@ body:has(#shell.show) #login{display:none!important;}
   <button class="secondary" type="button" onclick="clearProductSelection()">Clear selection</button>
   <span class="trash-bulk-count" id="productSelectedCount">0 selected</span>
   <span class="spacer"></span>
+  <button class="secondary" type="button" onclick="removeDuplicateProducts()">Remove duplicates</button>
   <button class="danger" type="button" onclick="deleteSelectedProducts()">Delete selected</button>
   <button class="danger" type="button" onclick="deleteAllProducts()">Delete all</button>
 </div>
@@ -837,6 +838,49 @@ async function writeAudit(action,product,before={}){try{await db.collection('aud
 async function saveProduct(){const name=$('aName').value.trim(),barcode=$('aBarcode').value.trim(),cat=$('aCat').value,price=Number($('aPrice').value),meta=$('aMeta').value.trim(),description=$('aDescription').value.trim(),expiry=$('aExpiry').value;if(!name||!cat||!Number.isFinite(price)||price<0)return alert('Add a product name, category and valid price.');$('saveBtn').disabled=true;$('saveBtn').textContent='Saving...';try{const old=editingId?products.find(x=>String(x.id)===String(editingId))||{}:{},newImages=await readFiles($('aImages').files),images=[...editingImages,...newImages].slice(0,3),data={name,brand:'',genericName:'',activeIngredient:'',barcode,cat,price,stock:editingId?Math.max(1,Number(old.stock)||9999):9999,meta,description,expiry,images,prescriptionRequired:false,active:true,updatedAt:sbFieldValue.serverTimestamp()};let ref;if(editingId){ref=db.collection('products').doc(String(editingId));await ref.set(data,{merge:true})}else{ref=await db.collection('products').add({...data,createdAt:sbFieldValue.serverTimestamp()})}await writeAudit(editingId?'Product edited':'Product created',{id:ref.id||editingId,...data},old);resetForm();await refreshExpiryAlerts();renderProductsTable();alert('Product saved and published on the customer website.')}catch(err){alert('Could not save product: '+err.message)}finally{$('saveBtn').disabled=false;$('saveBtn').textContent=editingId?'Save changes':'Add product'}}
 function editProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;editingId=id;editingImages=[...(p.images||[])];$('aName').value=p.name||'';$('aBarcode').value=p.barcode||'';$('aCat').value=p.cat||'';updateProductSubcategoryField(p.subcategory||p.medicalDeviceSubcategory||'');$('aPrice').value=p.price??'';$('aMeta').value=p.meta||'';$('aDescription').value=p.description||'';$('aExpiry').value=(typeof getProductExpiryValue(p)==='string'?getProductExpiryValue(p):'');$('aPrescription').checked=false;$('imagePreview').innerHTML=editingImages.map(i=>`<img src="${i}">`).join('');$('formTitle').textContent='Edit product';$('saveBtn').textContent='Save changes';showPanel('products');scrollTo({top:0,behavior:'smooth'})}
 async function deleteProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;if(!confirm(`Move ${p.name} to Trash? You can undo this for 30 seconds or restore it later from Trash.`))return;try{await db.collection('products').doc(String(id)).set({active:false,deletedAt:sbFieldValue.serverTimestamp(),deletedBy:auth.currentUser?.email||''},{merge:true});await writeAudit('Product moved to Trash',p,p);showUndoSnackbar(id,p.name)}catch(err){alert('Could not move product to Trash: '+err.message)}}
+async function removeDuplicateProducts(){
+  if(!requireSupabase())return;
+  const groups=new Map();
+  for(const p of products||[]){
+    const key=normalizeImportKey(p?.name||'');
+    if(!key)continue;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(p);
+  }
+  const duplicateGroups=[...groups.values()].filter(g=>g.length>1);
+  const extraCount=duplicateGroups.reduce((n,g)=>n+g.length-1,0);
+  if(!extraCount)return alert('No duplicate product names were found.');
+  const examples=duplicateGroups.slice(0,8).map(g=>`• ${g[0].name} (${g.length} copies)`).join('\n');
+  const more=duplicateGroups.length>8?`\n…and ${duplicateGroups.length-8} more duplicate name(s).`:'';
+  if(!confirm(`${extraCount} duplicate product(s) were found.\n\n${examples}${more}\n\nKeep ONE copy of each product name and move the extra copies to Trash?`))return;
+  try{
+    let moved=0;
+    for(const group of duplicateGroups){
+      // Keep the most recently updated copy when possible.
+      const sorted=[...group].sort((a,b)=>{
+        const ta=a?.updatedAt?.toMillis?.()||a?.createdAt?.toMillis?.()||0;
+        const tb=b?.updatedAt?.toMillis?.()||b?.createdAt?.toMillis?.()||0;
+        return tb-ta;
+      });
+      const keep=sorted[0];
+      for(const dup of sorted.slice(1)){
+        await db.collection('products').doc(String(dup.id)).set({
+          active:false,
+          duplicateOf:String(keep.id),
+          deletedReason:'Duplicate product name',
+          deletedAt:sbFieldValue.serverTimestamp(),
+          deletedBy:auth.currentUser?.email||''
+        },{merge:true});
+        moved++;
+      }
+    }
+    alert(`${moved} duplicate product(s) moved to Trash. One copy of each product name was kept.`);
+  }catch(err){
+    console.error('Duplicate cleanup failed',err);
+    alert('Could not remove duplicates: '+err.message);
+  }
+}
+
 
 function trashKey(type,id){return `${type}:${String(id)}`}
 function currentTrashItems(){
@@ -1670,12 +1714,10 @@ async function importSelectedSoftPharmProducts(){
   const newSelected=selected.filter(r=>!getExistingImportProduct(r));
   let updateExisting=false;
   if(existingSelected.length){
-    updateExisting=confirm(`${existingSelected.length} selected item(s) already exist on the website.
-
-Do you want to UPDATE them with the latest data from this file?
-
-OK = Update existing items
-Cancel = Keep existing items unchanged`);
+    const existingNames=[...new Set(existingSelected.map(r=>r.name).filter(Boolean))];
+    const preview=existingNames.slice(0,10).map(n=>`• ${n}`).join('\n');
+    const more=existingNames.length>10?`\n…and ${existingNames.length-10} more.`:'';
+    updateExisting=confirm(`${existingSelected.length} selected product(s) already exist on the website:\n\n${preview}${more}\n\nThese will NOT be duplicated. Do you want to update the existing product(s) with the latest price/details from this file?\n\nOK = Update existing\nCancel = Keep existing unchanged`);
   }
   const actionSummary=`${newSelected.length} new product(s)`+(existingSelected.length?(updateExisting?` + ${existingSelected.length} update(s)`:`; ${existingSelected.length} existing item(s) will be skipped`):'');
   if(!confirm(`Continue with import?
