@@ -358,6 +358,25 @@ function requireSupabase(){if(!supabaseReady){alert('Supabase is not configured.
 
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
 const defaultCategories=['Oral Care','Baby Care','Personal Care','Skincare','Hair Care','Vitamins & Supplements','Medical Devices','Hygiene','Nutrition','Needs Review'];
+// Medical-device subcategory support used by manual add + SoftPharm import.
+const MEDICAL_DEVICE_SUBCATEGORIES=['Blood Pressure Monitors','Blood Glucose Meters','Glucose Test Strips','Thermometers','Pulse Oximeters','Nebulizers','Scales','First Aid & Wound Care','Supports & Braces','Medical Accessories','Other Medical Devices'];
+let hiddenMedicalDeviceSubcategories=[];
+let categorySubcategories={};
+function detectMedicalDeviceSubcategory(name){
+  const t=String(name||'').toLowerCase();
+  if(/blood pressure|bp monitor|tensiometer|tension meter|sphygmo/.test(t))return 'Blood Pressure Monitors';
+  if(/glucose.*strip|test strip|accu.?chek.*strip/.test(t))return 'Glucose Test Strips';
+  if(/accu.?chek|glucometer|glucose meter|blood glucose meter|glucose machine/.test(t))return 'Blood Glucose Meters';
+  if(/thermometer|temperature gun|digital temp/.test(t))return 'Thermometers';
+  if(/oximeter|spo2|pulse ox/.test(t))return 'Pulse Oximeters';
+  if(/nebulizer|nebuliser/.test(t))return 'Nebulizers';
+  if(/weighing scale|bathroom scale|body scale|digital scale/.test(t))return 'Scales';
+  if(/bandage|gauze|plaster|wound|dressing|first aid/.test(t))return 'First Aid & Wound Care';
+  if(/brace|support|knee support|ankle support|wrist support|cervical collar/.test(t))return 'Supports & Braces';
+  if(/syringe|needle|tongue depressor|gloves|mask|medical accessory/.test(t))return 'Medical Accessories';
+  return 'Other Medical Devices';
+}
+
 function safeRead(key,fallback){try{const raw=localStorage.getItem(key);if(!raw)return structuredClone(fallback);const parsed=JSON.parse(raw);return Array.isArray(parsed)&&parsed.length?parsed:structuredClone(fallback)}catch(e){return structuredClone(fallback)}}
 let products=[],trashProducts=[],categories=[],deletedCategories=[],trashSelected=new Set(),orders=[],editingId=null,editingImages=[],unsubscribeOrders=null,unsubscribeProducts=null,unsubscribeSettings=null,unsubscribeReviews=null,undoTimer=null,undoProductId=null,profiles=[],reviews=[],auditLogs=[],charts={},shopSettings={deliveryFee:3,freeDeliveryThreshold:25,deliveryEnabled:true,pickupEnabled:true};
 let productsVisibleLimit=100,trashVisibleLimit=100,ordersVisibleLimit=100,customersVisibleLimit=100;
