@@ -1070,27 +1070,54 @@ async function permanentlyDeleteCategory(name,ask=true){
 async function restoreSelectedTrash(){const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');if(!confirm(`Restore ${items.length} selected item(s)?`))return;for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')await restoreProduct(id,false);else if(type==='category')await restoreCategory(id,false)}clearTrashSelection()}
 async function deleteSelectedTrashForever(){const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');if(!confirm(`Permanently delete ${items.length} selected item(s)? This cannot be undone.`))return;for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')await permanentlyDeleteProduct(id,false);else if(type==='category')await permanentlyDeleteCategory(id,false)}clearTrashSelection()}
 async function deleteAllTrashForever(){
-  const items=currentTrashItems();
-  if(!items.length)return alert('Trash is already empty.');
-  if(!confirm(`Permanently delete ALL ${items.length} item(s) currently in Trash? This cannot be undone.`))return;
+  // IMPORTANT: take a frozen snapshot first. Realtime listeners update trashProducts
+  // while deletes are running, so looking items up again can make a bulk clear stop early.
+  const productSnapshot=[...trashProducts].map(p=>({id:String(p.id),name:p.name||'Unnamed product'}));
+  const categorySnapshot=[...deletedCategories].map(c=>({
+    name:String(c.name),
+    productIds:[...(c.productIds||[])].map(String)
+  }));
+  const totalVisibleItems=productSnapshot.length+categorySnapshot.length;
+  if(!totalVisibleItems)return alert('Trash is already empty.');
+  if(!confirm(`Permanently delete EVERYTHING in Trash (${totalVisibleItems} item(s))? This cannot be undone.`))return;
 
   try{
-    // Delete in chunks so a large trash does not freeze the page.
-    for(let i=0;i<items.length;i+=100){
-      const chunk=items.slice(i,i+100);
-      for(const item of chunk){
-        if(item.type==='product')await permanentlyDeleteProduct(item.id,false);
-        else if(item.type==='category')await permanentlyDeleteCategory(item.id,false);
-      }
+    // A deleted category can reference products that are also listed separately in Trash.
+    // Build one unique product-id set so every trashed product is deleted exactly once.
+    const ids=new Set(productSnapshot.map(p=>p.id));
+    categorySnapshot.forEach(c=>c.productIds.forEach(id=>ids.add(id)));
+    const productIds=[...ids];
+
+    // Delete directly from the frozen IDs. Do not call permanentlyDeleteProduct here,
+    // because that helper depends on the live trashProducts array changing in realtime.
+    for(let i=0;i<productIds.length;i+=50){
+      const chunk=productIds.slice(i,i+50);
+      await Promise.all(chunk.map(id=>db.collection('products').doc(id).delete()));
       await yieldToBrowser();
     }
+
+    // Remove every deleted-category record in one settings update.
+    if(categorySnapshot.length){
+      const deletedNames=new Set(categorySnapshot.map(c=>c.name));
+      const nextDeleted=deletedCategories.filter(c=>!deletedNames.has(String(c.name)));
+      const nextCategories=categories.filter(name=>!deletedNames.has(String(name)));
+      await db.collection('settings').doc('catalog').set({
+        categories:nextCategories,
+        deletedCategories:nextDeleted,
+        updatedAt:sbFieldValue.serverTimestamp()
+      },{merge:true});
+    }
+
     trashSelected.clear();
     trashVisibleLimit=100;
+    // Update local state immediately so the UI empties without waiting for realtime callbacks.
+    trashProducts=[];
+    if(categorySnapshot.length)deletedCategories=[];
     renderTrash();
-    alert('Trash cleared permanently.');
+    alert(`Trash cleared permanently. ${productIds.length} product(s) deleted${categorySnapshot.length?` and ${categorySnapshot.length} category record(s) removed`:''}.`);
   }catch(err){
     console.error('Delete all trash failed',err);
-    alert('Could not delete all trash items: '+(err?.message||err));
+    alert('Could not clear the whole Trash: '+(err?.message||err));
   }
 }
 
