@@ -305,7 +305,7 @@ body:has(#shell.show) #login{display:none!important;}
 
       <div class="keyword-manager">
         <h3>2. Quick keywords & automatic categories</h3>
-        <div class="muted">Each keyword is also the category itself. Example: <b>Medicine</b> matches a product → its category becomes <b>Medicine</b> immediately instead of para. Deleting a keyword also removes all of its matching products from the current import.</div>
+        <div class="muted">Choose a keyword group like <b>Medicine</b> to select or clear all matching products at once. The category is detected automatically from the product name. You can also add or delete your own keyword groups.</div>
         <div class="keyword-toolbar">
           <select id="softpharmKeywordFilter" onchange="previewKeywordMatches()"></select>
           <button class="save" type="button" onclick="selectSoftPharmKeyword(true)">Select keyword</button>
@@ -314,6 +314,7 @@ body:has(#shell.show) #login{display:none!important;}
         </div>
         <div class="keyword-toolbar">
           <input id="newKeywordLabel" placeholder="Keyword name, e.g. Hair Care">
+          <select id="newKeywordCategory"></select>
           <input id="newKeywordTerms" placeholder="Words to match, comma separated">
           <button class="secondary" type="button" onclick="addSoftPharmKeywordGroup()">Add keyword</button>
         </div>
@@ -336,7 +337,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. Every keyword is its own category; unmatched products use <b>para</b>. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. Categories are detected automatically using the keyword groups above; unmatched products use <b>para</b>. Existing products keep their images and descriptions. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products with no category automatically use <b>para</b>. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
     </div>
   </div>
 </section>
@@ -361,7 +362,7 @@ let productSelected=new Set();
 let softpharmRows=[];
 const SOFTPHARM_KEYWORD_STORAGE='nadineSoftpharmKeywordGroupsV1';
 const defaultSoftPharmKeywordGroups=[
-  {id:'medicine',label:'Medicine',category:'Medicine',terms:['tablet','tablets',' tab ',' tabs',' tbs','capsule','capsules',' cap ',' caps','ampoule','ampoules',' amp ',' syrup','suspension','suppository','suppositories','drops','eye drops','nasal','spray','effer','mg','mcg','antibiotic','painkiller','ointment']},
+  {id:'medicine',label:'Medicine',category:'Medicines',terms:['tablet','tablets',' tab ',' tabs',' tbs','capsule','capsules',' cap ',' caps','ampoule','ampoules',' amp ',' syrup','suspension','suppository','suppositories','drops','eye drops','nasal','spray','effer','mg','mcg','antibiotic','painkiller','ointment']},
   {id:'vitamins',label:'Vitamins',category:'Vitamins',terms:['vitamin','b1','b6','b12','zinc','multivitamin','folic','biotin','vit d','vit c','vit e']},
   {id:'supplements',label:'Supplements',category:'Supplements',terms:['probiotic','5-htp','acai','omega','magnesium','collagen','ginseng','melatonin','supplement']},
   {id:'skincare',label:'Skincare',category:'Skincare',terms:['face cream','body cream','ret cream','micellar','spf','sun tan','sunscreen','serum','moistur','cleanser','acne','mask','lotion']},
@@ -371,13 +372,7 @@ const defaultSoftPharmKeywordGroups=[
 ];
 let softpharmKeywordGroups=[];
 function loadSoftPharmKeywordGroups(){
-  try{
-    const saved=JSON.parse(localStorage.getItem(SOFTPHARM_KEYWORD_STORAGE)||'null');
-    softpharmKeywordGroups=Array.isArray(saved)&&saved.length?saved:JSON.parse(JSON.stringify(defaultSoftPharmKeywordGroups));
-  }catch(_){softpharmKeywordGroups=JSON.parse(JSON.stringify(defaultSoftPharmKeywordGroups))}
-  // A keyword group IS its category: the category name always follows the keyword label.
-  softpharmKeywordGroups=softpharmKeywordGroups.map(g=>({...g,category:cleanImportText(g.label)||cleanImportText(g.category)||'para'}));
-  saveSoftPharmKeywordGroups();
+  try{const saved=JSON.parse(localStorage.getItem(SOFTPHARM_KEYWORD_STORAGE)||'null');softpharmKeywordGroups=Array.isArray(saved)&&saved.length?saved:JSON.parse(JSON.stringify(defaultSoftPharmKeywordGroups))}catch(_){softpharmKeywordGroups=JSON.parse(JSON.stringify(defaultSoftPharmKeywordGroups))}
 }
 function saveSoftPharmKeywordGroups(){localStorage.setItem(SOFTPHARM_KEYWORD_STORAGE,JSON.stringify(softpharmKeywordGroups))}
 function keywordHaystack(name){return ' '+String(name||'').toLowerCase().replace(/[^a-z0-9+\-]+/g,' ')+' '}
@@ -390,9 +385,10 @@ function detectSoftPharmCategory(name){
   return 'para';
 }
 function renderSoftPharmKeywordManager(){
-  const sel=$('softpharmKeywordFilter'),list=$('softpharmKeywordList');if(!sel||!list)return;
-  const old=sel.value;sel.innerHTML=softpharmKeywordGroups.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.label)}</option>`).join('');if(softpharmKeywordGroups.some(g=>g.id===old))sel.value=old;
-  list.innerHTML=softpharmKeywordGroups.map(g=>`<span class="keyword-pill"><b>${escapeHtml(g.label)}</b> <span>${g.terms.length} words</span><button type="button" title="Delete keyword and its matching imported products" onclick="deleteSoftPharmKeywordGroup('${escapeHtml(g.id)}')">×</button></span>`).join('');
+  const sel=$('softpharmKeywordFilter'),list=$('softpharmKeywordList'),cat=$('newKeywordCategory');if(!sel||!list)return;
+  const old=sel.value;sel.innerHTML=softpharmKeywordGroups.map(g=>`<option value="${escapeHtml(g.id)}">${escapeHtml(g.label)} → ${escapeHtml(g.category)}</option>`).join('');if(softpharmKeywordGroups.some(g=>g.id===old))sel.value=old;
+  const cats=normalizeCategories([...defaultCategories,'para',...categories,...softpharmKeywordGroups.map(g=>g.category)]);if(cat)cat.innerHTML=cats.map(c=>`<option>${escapeHtml(c)}</option>`).join('');
+  list.innerHTML=softpharmKeywordGroups.map(g=>`<span class="keyword-pill"><b>${escapeHtml(g.label)}</b> → ${escapeHtml(g.category)} <span>${g.terms.length} words</span><button type="button" title="Delete keyword" onclick="deleteSoftPharmKeywordGroup('${escapeHtml(g.id)}')">×</button></span>`).join('');
   previewKeywordMatches();
 }
 function selectedSoftPharmKeywordGroup(){return softpharmKeywordGroups.find(g=>g.id===$('softpharmKeywordFilter')?.value)||null}
@@ -400,23 +396,11 @@ function matchingSoftPharmKeywordRows(){const g=selectedSoftPharmKeywordGroup();
 function previewKeywordMatches(){const g=selectedSoftPharmKeywordGroup(),rows=matchingSoftPharmKeywordRows(),el=$('softpharmKeywordCount');if(el)el.textContent=g?`${rows.length} matching product${rows.length===1?'':'s'}`:'';renderSoftPharmPreview()}
 function selectSoftPharmKeyword(checked){const rows=matchingSoftPharmKeywordRows();rows.forEach(r=>checked?softpharmSelected.add(r.key):softpharmSelected.delete(r.key));renderSoftPharmPreview();previewKeywordMatches()}
 function addSoftPharmKeywordGroup(){
-  const label=cleanImportText($('newKeywordLabel')?.value),terms=String($('newKeywordTerms')?.value||'').split(',').map(cleanImportText).filter(Boolean);
-  if(!label||!terms.length)return alert('Add a keyword/category name and at least one matching word.');
-  const id='custom-'+Date.now();softpharmKeywordGroups.push({id,label,category:label,terms});saveSoftPharmKeywordGroups();$('newKeywordLabel').value='';$('newKeywordTerms').value='';
-  // Re-detect categories immediately so this new keyword becomes the category now, not para.
-  softpharmRows.forEach(r=>{const detected=detectSoftPharmCategory(r.name);if(detected!=='para')r.category=detected});
-  renderSoftPharmKeywordManager();renderSoftPharmPreview();
+  const label=cleanImportText($('newKeywordLabel')?.value),category=cleanImportText($('newKeywordCategory')?.value),terms=String($('newKeywordTerms')?.value||'').split(',').map(cleanImportText).filter(Boolean);
+  if(!label||!category||!terms.length)return alert('Add a keyword name, category and at least one matching word.');
+  const id='custom-'+Date.now();softpharmKeywordGroups.push({id,label,category,terms});saveSoftPharmKeywordGroups();$('newKeywordLabel').value='';$('newKeywordTerms').value='';renderSoftPharmKeywordManager();
 }
-function deleteSoftPharmKeywordGroup(id){
-  const g=softpharmKeywordGroups.find(x=>x.id===id);if(!g)return;
-  const doomed=softpharmRows.filter(r=>keywordGroupMatchesName(g,r.name)||cleanImportText(r.category).toLowerCase()===cleanImportText(g.label).toLowerCase());
-  if(!confirm(`Delete “${g.label}” and remove its ${doomed.length} matching product(s) from this import?`))return;
-  const doomedKeys=new Set(doomed.map(r=>String(r.key)));
-  softpharmRows=softpharmRows.filter(r=>!doomedKeys.has(String(r.key)));
-  doomedKeys.forEach(k=>softpharmSelected.delete(k));
-  softpharmKeywordGroups=softpharmKeywordGroups.filter(x=>x.id!==id);saveSoftPharmKeywordGroups();
-  recalcSoftPharmExistingCount();prepareSoftPharmImporter();renderSoftPharmKeywordManager();renderSoftPharmPreview();
-}
+function deleteSoftPharmKeywordGroup(id){const g=softpharmKeywordGroups.find(x=>x.id===id);if(!g)return;if(!confirm(`Delete keyword group “${g.label}”?`))return;softpharmKeywordGroups=softpharmKeywordGroups.filter(x=>x.id!==id);saveSoftPharmKeywordGroups();renderSoftPharmKeywordManager()}
 loadSoftPharmKeywordGroups();
 let softpharmSelected=new Set();
 let softpharmVisibleLimit=100;
@@ -1355,9 +1339,7 @@ function mapSoftPharmRow(raw,index){
   const stock=stockDefined?Math.max(0,importNumber(stockRaw)):999999;
 
   const fileCategory=cleanImportText(importValue(raw,['category','family','group','department','section','categorie','catégorie','famille']));
-  // SoftPharm often sends 'para' as a placeholder. Keyword detection must override that placeholder immediately.
-  const detectedCategory=detectSoftPharmCategory(name);
-  const category=(!fileCategory||/^para$|^uncategori[sz]ed$/i.test(fileCategory)) ? detectedCategory : fileCategory;
+  const category=fileCategory || detectSoftPharmCategory(name);
 
   return {
     key:String(index),
@@ -1459,7 +1441,7 @@ function softPharmPriceListPdfRow(line){
     name,
     price:priceText,
     currency,
-    category:''
+    category:'para'
   };
 }
 
