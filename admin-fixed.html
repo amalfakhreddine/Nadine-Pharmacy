@@ -818,7 +818,88 @@ async function deleteAllProducts(){
 }
 function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>{const img=new Image();img.onerror=reject;img.onload=()=>{const max=700,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',.7))};img.src=reader.result};reader.readAsDataURL(file)})}async function readFiles(files){const selected=[...files].slice(0,3);return Promise.all(selected.map(compressImage))}async function previewSelectedImages(){let imgs=await readFiles($('aImages').files);$('imagePreview').innerHTML=[...editingImages,...imgs].slice(0,3).map(i=>`<img src="${i}">`).join('')}
 async function writeAudit(action,product,before={}){try{await db.collection('auditLogs').add({action,productId:String(product.id||editingId||''),productName:product.name||'',before,after:product,adminEmail:auth.currentUser?.email||'',createdAt:sbFieldValue.serverTimestamp()})}catch(e){console.warn('Audit log unavailable',e)}}
-async function saveProduct(){const name=$('aName').value.trim(),barcode=$('aBarcode').value.trim(),cat=$('aCat').value,subcategory=($('medicalDeviceSubcatField')?.style.display!=='none'?($('aMedicalDeviceSubcat')?.value||''):''),medicalDeviceSubcategory=cat==='Medical Devices'?(subcategory||detectMedicalDeviceSubcategory(name)):'',price=Number($('aPrice').value),meta=$('aMeta').value.trim(),description=$('aDescription').value.trim(),expiry=$('aExpiry').value;if(!name||!cat||!Number.isFinite(price)||price<0)return alert('Add a product name, category and valid price.');$('saveBtn').disabled=true;$('saveBtn').textContent='Saving...';try{const old=editingId?products.find(x=>String(x.id)===String(editingId))||{}:{},newImages=await readFiles($('aImages').files),images=[...editingImages,...newImages].slice(0,3),data={name,brand:'',genericName:'',activeIngredient:'',barcode,cat,subcategory:subcategory||medicalDeviceSubcategory,medicalDeviceSubcategory,price,stock:editingId?Math.max(1,Number(old.stock)||9999):9999,meta,description,expiry,images,prescriptionRequired:false,active:true,updatedAt:sbFieldValue.serverTimestamp()};let ref;if(editingId){ref=db.collection('products').doc(String(editingId));await ref.set(data,{merge:true})}else{ref=await db.collection('products').add({...data,createdAt:sbFieldValue.serverTimestamp()})}await writeAudit(editingId?'Product edited':'Product created',{id:ref.id||editingId,...data},old);resetForm();await refreshExpiryAlerts();renderProductsTable();alert('Product saved and published on the customer website.')}catch(err){alert('Could not save product: '+err.message)}finally{$('saveBtn').disabled=false;$('saveBtn').textContent=editingId?'Save changes':'Add product'}}
+async function saveProduct(){
+  const name=$('aName').value.trim(),barcode=$('aBarcode').value.trim(),cat=$('aCat').value,
+    subcategory=($('medicalDeviceSubcatField')?.style.display!=='none'?($('aMedicalDeviceSubcat')?.value||''):''),
+    medicalDeviceSubcategory=cat==='Medical Devices'?(subcategory||detectMedicalDeviceSubcategory(name)):'',
+    price=Number($('aPrice').value),meta=$('aMeta').value.trim(),description=$('aDescription').value.trim(),expiry=$('aExpiry').value;
+  if(!name||!cat||!Number.isFinite(price)||price<0)return alert('Add a product name, category and valid price.');
+
+  $('saveBtn').disabled=true;
+  $('saveBtn').textContent='Saving...';
+  try{
+    // IMPORTANT: manual product creation must never silently create a second active product
+    // with the same normalized name. Read fresh data from Supabase so this also works when
+    // the live products listener has not updated yet.
+    let freshProducts=products||[];
+    try{
+      const snap=await db.collection('products').get();
+      freshProducts=snap.docs.map(d=>({id:d.id,...d.data()}));
+    }catch(e){
+      console.warn('Fresh duplicate check unavailable; using loaded products.',e);
+    }
+    const wantedName=normalizeImportKey(name);
+    const sameName=freshProducts.filter(p=>
+      p && p.active!==false && normalizeImportKey(p.name||'')===wantedName && String(p.id)!==String(editingId||'')
+    );
+
+    let duplicateTarget=null;
+    if(sameName.length){
+      duplicateTarget=sameName[0];
+      const countText=sameName.length>1?` There are already ${sameName.length} active copies with this name.`:'';
+      const ok=confirm(`“${name}” already exists on the website.${countText}\n\nDo you want to UPDATE the existing product instead?\n\nOK = update existing\nCancel = do not save another copy`);
+      if(!ok)return;
+    }
+
+    const targetId=editingId||duplicateTarget?.id||null;
+    const old=targetId?freshProducts.find(x=>String(x.id)===String(targetId))||products.find(x=>String(x.id)===String(targetId))||{}:{};
+    const newImages=await readFiles($('aImages').files),images=[...editingImages,...newImages].slice(0,3),
+      data={name,brand:'',genericName:'',activeIngredient:'',barcode,cat,subcategory:subcategory||medicalDeviceSubcategory,
+      medicalDeviceSubcategory,price,stock:targetId?Math.max(1,Number(old.stock)||9999):9999,meta,description,expiry,images,
+      prescriptionRequired:false,active:true,updatedAt:sbFieldValue.serverTimestamp()};
+
+    let ref;
+    if(targetId){
+      ref=db.collection('products').doc(String(targetId));
+      await ref.set(data,{merge:true});
+    }else{
+      ref=await db.collection('products').add({...data,createdAt:sbFieldValue.serverTimestamp()});
+    }
+
+    // If duplicates already existed before this fix, keep the updated copy and automatically
+    // move all extra active copies with the same name to Trash.
+    if(duplicateTarget && sameName.length>1){
+      const keepId=String(duplicateTarget.id);
+      for(const dup of sameName){
+        if(String(dup.id)===keepId)continue;
+        await db.collection('products').doc(String(dup.id)).set({
+          active:false,
+          duplicateOf:keepId,
+          deletedReason:'Duplicate product name',
+          deletedAt:sbFieldValue.serverTimestamp(),
+          deletedBy:auth.currentUser?.email||''
+        },{merge:true});
+      }
+    }
+
+    await writeAudit(targetId?'Product edited':'Product created',{id:ref.id||targetId,...data},old);
+    resetForm();
+    await refreshExpiryAlerts();
+    renderProductsTable();
+    if(duplicateTarget){
+      alert(sameName.length>1
+        ? `Existing “${name}” updated. ${sameName.length-1} extra duplicate copy/copies were moved to Trash.`
+        : `“${name}” already existed, so the existing product was updated. No duplicate was created.`);
+    }else{
+      alert('Product saved and published on the customer website.');
+    }
+  }catch(err){
+    alert('Could not save product: '+err.message);
+  }finally{
+    $('saveBtn').disabled=false;
+    $('saveBtn').textContent=editingId?'Save changes':'Add product';
+  }
+}
 function editProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;editingId=id;editingImages=[...(p.images||[])];$('aName').value=p.name||'';$('aBarcode').value=p.barcode||'';$('aCat').value=p.cat||'';updateProductSubcategoryField(p.subcategory||p.medicalDeviceSubcategory||'');$('aPrice').value=p.price??'';$('aMeta').value=p.meta||'';$('aDescription').value=p.description||'';$('aExpiry').value=(typeof getProductExpiryValue(p)==='string'?getProductExpiryValue(p):'');$('aPrescription').checked=false;$('imagePreview').innerHTML=editingImages.map(i=>`<img src="${i}">`).join('');$('formTitle').textContent='Edit product';$('saveBtn').textContent='Save changes';showPanel('products');scrollTo({top:0,behavior:'smooth'})}
 async function deleteProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;if(!confirm(`Move ${p.name} to Trash? You can undo this for 30 seconds or restore it later from Trash.`))return;try{await db.collection('products').doc(String(id)).set({active:false,deletedAt:sbFieldValue.serverTimestamp(),deletedBy:auth.currentUser?.email||''},{merge:true});await writeAudit('Product moved to Trash',p,p);showUndoSnackbar(id,p.name)}catch(err){alert('Could not move product to Trash: '+err.message)}}
 async function removeDuplicateProducts(){
