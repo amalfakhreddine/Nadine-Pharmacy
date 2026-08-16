@@ -1220,6 +1220,14 @@ async function removeCategory(c){
       updatedAt:sbFieldValue.serverTimestamp()
     },{merge:true});
 
+    // Keep the local admin list in sync. Only the products whose IDs were captured above are removed.
+    const removedIds=new Set(productIds);
+    products=products.filter(p=>!removedIds.has(String(p.id)));
+    categories=normalizeCategories(categories.filter(x=>String(x)!==String(c)));
+    deletedCategories=nextDeleted;
+    productSelected=new Set([...productSelected].filter(id=>!removedIds.has(String(id))));
+    renderAll();
+
   }catch(err){
     console.error('Could not move category and products to Trash',err);
     alert('Could not move category to Trash: '+(err?.message||err));
