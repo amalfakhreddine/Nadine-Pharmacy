@@ -1107,12 +1107,16 @@ async function deleteAllTrashForever(){
     categorySnapshot.forEach(c=>c.productIds.forEach(id=>ids.add(id)));
     const productIds=[...ids];
 
-    // Delete directly from the frozen IDs. Do not call permanentlyDeleteProduct here,
-    // because that helper depends on the live trashProducts array changing in realtime.
-    for(let i=0;i<productIds.length;i+=50){
-      const chunk=productIds.slice(i,i+50);
-      await Promise.all(chunk.map(id=>db.collection('products').doc(id).delete()));
-      await yieldToBrowser();
+    // One bulk REST delete per large chunk instead of one network request per product.
+    // This keeps Delete All fast even with thousands of trashed products.
+    if(typeof db.bulkDelete==='function'){
+      await db.bulkDelete('products',productIds,500);
+    }else{
+      for(let i=0;i<productIds.length;i+=50){
+        const chunk=productIds.slice(i,i+50);
+        await Promise.all(chunk.map(id=>db.collection('products').doc(id).delete()));
+        await yieldToBrowser();
+      }
     }
 
     // Remove every deleted-category record in one settings update.
@@ -1849,46 +1853,57 @@ async function importSelectedSoftPharmProducts(){
     updateExisting=confirm(`${existingSelected.length} selected product(s) already exist on the website:\n\n${preview}${more}\n\nThese will NOT be duplicated. Do you want to update the existing product(s) with the latest price/details from this file?\n\nOK = Update existing\nCancel = Keep existing unchanged`);
   }
   const actionSummary=`${newSelected.length} new product(s)`+(existingSelected.length?(updateExisting?` + ${existingSelected.length} update(s)`:`; ${existingSelected.length} existing item(s) will be skipped`):'');
-  if(!confirm(`Continue with import?
+  if(!confirm(`Continue with import?\n\n${actionSummary}`))return;
 
-${actionSummary}`))return;
-
-  const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing…';
+  const btn=$('importSelectedBtn'),progress=$('importProgress');btn.disabled=true;progress.textContent='Preparing fast import…';
   try{
     const mergedCategories=normalizeCategories([...categories.filter(c=>c!=='para'),...defaultCategories,...selected.map(resolveImportCategory)]);
-    let batch=db.batch(),ops=0,done=0,created=0,updated=0,skipped=0;
-    batch.set(db.collection('settings').doc('catalog'),{
-      categories:mergedCategories,
-      updatedAt:sbFieldValue.serverTimestamp()
-    },{merge:true});
-    ops++;
-    for(const row of selected){
-      const existing=getExistingImportProduct(row);
+    await db.collection('settings').doc('catalog').set({categories:mergedCategories,updatedAt:sbFieldValue.serverTimestamp()},{merge:true});
+
+    let created=0,updated=0,skipped=0;
+    const docs=[];
+    for(let i=0;i<selected.length;i++){
+      const row=selected[i],existing=getExistingImportProduct(row);
       if(existing&&!updateExisting){skipped++;continue;}
-      const ref=existing?db.collection('products').doc(existing.id):db.collection('products').doc();
-      const data={
-        name:row.name,barcode:row.barcode||existing?.barcode||'',cat:(existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row)),
-        subcategory:((existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row))==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):''),
-        medicalDeviceSubcategory:((existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row))==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):''),
-        price:Number(row.price||0),stock:row.stockDefined?Number(row.stock||0):(existing?Number(existing.stock??999999):999999),active:true,prescriptionRequired:existing?.prescriptionRequired||false,
-        importSource:'SoftPharm file',softpharmCode:row.code||existing?.softpharmCode||'',updatedAt:sbFieldValue.serverTimestamp()
+      const id=existing?String(existing.id):crypto.randomUUID();
+      const cat=(existing&&existing.categoryOverride?existing.cat:resolveImportCategory(row));
+      const patch={
+        name:row.name,barcode:row.barcode||existing?.barcode||'',cat,
+        subcategory:(cat==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):''),
+        medicalDeviceSubcategory:(cat==='Medical Devices'?detectMedicalDeviceSubcategory(row.name):''),
+        price:Number(row.price||0),stock:row.stockDefined?Number(row.stock||0):(existing?Number(existing.stock??999999):999999),active:true,
+        prescriptionRequired:existing?.prescriptionRequired||false,importSource:'SoftPharm file',
+        softpharmCode:row.code||existing?.softpharmCode||'',updatedAt:new Date().toISOString()
       };
-      if(!existing){Object.assign(data,{genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:sbFieldValue.serverTimestamp()});created++;}
-      else updated++;
-      batch.set(ref,data,{merge:true});ops++;done++;
-      if(ops>=300){
-        await batch.commit();
-        batch=db.batch();ops=0;
-        progress.textContent=`Processed ${done.toLocaleString()} / ${selected.length.toLocaleString()} products…`;
+      let data;
+      if(existing){
+        // Merge locally from the catalog already loaded in the admin. This preserves
+        // images/descriptions/manual overrides without an extra GET for every item.
+        data={...existing,...patch}; delete data.id;
+        updated++;
+      }else{
+        data={genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:new Date().toISOString(),...patch};
+        created++;
+      }
+      docs.push({id,data});
+      if(i&&i%3000===0){progress.textContent=`Preparing ${i.toLocaleString()} / ${selected.length.toLocaleString()}…`;await yieldToBrowser();}
+    }
+
+    if(typeof db.bulkUpsert==='function'){
+      for(let i=0;i<docs.length;i+=1200){
+        const part=docs.slice(i,i+1200);
+        await db.bulkUpsert('products',part,400);
+        progress.textContent=`Uploaded ${Math.min(i+part.length,docs.length).toLocaleString()} / ${docs.length.toLocaleString()} products…`;
         await yieldToBrowser();
       }
+    }else{
+      let batch=db.batch(),ops=0,done=0;
+      for(const d of docs){batch.set(db.collection('products').doc(d.id),d.data);ops++;done++;if(ops>=300){await batch.commit();batch=db.batch();ops=0;progress.textContent=`Processed ${done.toLocaleString()} / ${docs.length.toLocaleString()} products…`;await yieldToBrowser();}}
+      if(ops)await batch.commit();
     }
-    if(ops){await batch.commit();await yieldToBrowser();}
     progress.textContent=`Done: ${created} new, ${updated} updated${skipped?`, ${skipped} existing skipped`:''}.`;
     alert(`Import complete. ${created} new product(s) added, ${updated} existing product(s) updated${skipped?`, and ${skipped} existing product(s) kept unchanged`:''}. No duplicates were created.`);
     softpharmSelected.clear();
-    buildSoftPharmExistingIndex();
-    recalcSoftPharmExistingCount();
     renderSoftPharmPreview();
   }catch(err){console.error(err);progress.textContent='Import failed.';alert('Could not import products: '+err.message)}finally{btn.disabled=false}
 }
