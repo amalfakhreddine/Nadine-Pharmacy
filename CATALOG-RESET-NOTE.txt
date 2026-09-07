@@ -1,0 +1,19 @@
+CATALOG RESET
+
+This build includes a fast permanent catalog reset in Admin > Products:
+"Clear ALL product data"
+
+Use it once after deploying this build while signed into the admin dashboard.
+It permanently deletes all product documents from Supabase, including products already in Trash.
+Because both admin.html and the customer storefront read the same Supabase product collection,
+the products disappear from both places together.
+
+Bulk actions are also optimized:
+- Delete selected products
+- Delete all products (move to Trash)
+- Restore selected Trash items
+- Restore all Trash items
+- Delete selected Trash items forever
+- Delete all Trash items forever
+
+These use chunked bulk Supabase operations rather than one request per product.

@@ -243,6 +243,7 @@ body:has(#shell.show) #login{display:none!important;}
   <button class="secondary" type="button" onclick="removeDuplicateProducts()">Remove duplicates</button>
   <button class="danger" type="button" onclick="deleteSelectedProducts()">Delete selected</button>
   <button class="danger" type="button" onclick="deleteAllProducts()">Delete all</button>
+  <button class="danger" type="button" onclick="purgeAllProductsForever()" title="Permanently removes every product from Supabase, including Trash">Clear ALL product data</button>
 </div>
 <div class="table-wrap"><table class="table"><thead><tr><th><input class="trash-select" type="checkbox" id="productSelectAll" onchange="toggleAllVisibleProducts(this.checked)" aria-label="Select all visible products"></th><th>Product</th><th>Barcode</th><th>Photos</th><th>Category</th><th>Price</th><th>Expiry</th><th>Status</th><th>Actions</th></tr></thead><tbody id="rows"></tbody></table></div>
 <div class="import-load-more" style="margin-top:14px">
@@ -266,7 +267,7 @@ body:has(#shell.show) #login{display:none!important;}
 <section class="panel" id="panel-reviews"><div class="heading"><div><h1>Reviews</h1><div class="muted">Approve verified reviews, see who submitted them and reply publicly.</div></div></div><div class="review-kpis" id="reviewKpis"></div><div class="card"><div class="data-toolbar"><input id="reviewSearch" placeholder="Search customer, product or review…" oninput="renderAdminReviews()"><select id="reviewStatus" onchange="renderAdminReviews()"><option value="all">All statuses</option><option value="pending">Pending approval</option><option value="approved">Approved</option><option value="hidden">Hidden</option></select><select id="reviewStars" onchange="renderAdminReviews()"><option value="all">All ratings</option><option value="5">5 stars</option><option value="4">4 stars</option><option value="3">3 stars</option><option value="2">2 stars</option><option value="1">1 star</option></select></div><div id="adminReviewList"></div></div></section>
 <section class="panel" id="panel-activity"><div class="heading"><div><h1>Inventory Activity</h1><div class="muted">Track product creation, edits, stock changes, restores and deletions.</div></div><button class="secondary" onclick="loadAuditLogs()">↻ Refresh</button></div><div class="card"><div id="activityList"><div class="muted">Loading activity…</div></div></div></section>
 <section class="panel" id="panel-categories"><div class="heading"><div><h1>Categories</h1><div class="muted">Add or remove shop categories.</div></div></div><div class="card"><div class="row-actions"><input id="newCategory" placeholder="New category name" style="border:1px solid var(--line);border-radius:10px;padding:10px"><button class="save" onclick="addCategory()">Add category</button></div><div id="categoryList" style="margin-top:16px"></div></div></section>
-<section class="panel" id="panel-trash"><div class="heading"><div><h1>Trash</h1><div class="muted">Deleted products and categories stay here until restored or permanently removed. Restoring a deleted category also restores all products that were deleted with it.</div></div></div><div class="card"><div class="trash-toolbar"><select id="trashTypeFilter" onchange="trashVisibleLimit=100;renderTrash()"><option value="all">All deleted items</option><option value="products">Products only</option><option value="categories">Categories only</option></select><button class="secondary" type="button" onclick="selectAllTrashVisible()">Select all visible</button><button class="secondary" type="button" onclick="clearTrashSelection()">Clear selection</button><span class="trash-bulk-count" id="trashSelectedCount">0 selected</span><span class="spacer"></span><button class="secondary" type="button" onclick="restoreSelectedTrash()">Restore selected</button><button class="danger" type="button" onclick="deleteSelectedTrashForever()">Delete selected forever</button><button class="danger" type="button" onclick="deleteAllTrashForever()">Delete all</button></div><div class="table-wrap"><table class="table"><thead><tr><th><input class="trash-select" type="checkbox" id="trashSelectAll" onchange="toggleAllTrashVisible(this.checked)" aria-label="Select all visible trash items"></th><th>Item</th><th>Type / Category</th><th>Price</th><th>Qty</th><th>Deleted</th><th>Actions</th></tr></thead><tbody id="trashRows"></tbody></table></div>
+<section class="panel" id="panel-trash"><div class="heading"><div><h1>Trash</h1><div class="muted">Deleted products and categories stay here until restored or permanently removed. Restoring a deleted category also restores all products that were deleted with it.</div></div></div><div class="card"><div class="trash-toolbar"><select id="trashTypeFilter" onchange="trashVisibleLimit=100;renderTrash()"><option value="all">All deleted items</option><option value="products">Products only</option><option value="categories">Categories only</option></select><button class="secondary" type="button" onclick="selectAllTrashVisible()">Select all visible</button><button class="secondary" type="button" onclick="clearTrashSelection()">Clear selection</button><span class="trash-bulk-count" id="trashSelectedCount">0 selected</span><span class="spacer"></span><button class="secondary" type="button" onclick="restoreSelectedTrash()">Restore selected</button><button class="secondary" type="button" onclick="restoreAllTrash()">Restore all</button><button class="danger" type="button" onclick="deleteSelectedTrashForever()">Delete selected forever</button><button class="danger" type="button" onclick="deleteAllTrashForever()">Delete all</button></div><div class="table-wrap"><table class="table"><thead><tr><th><input class="trash-select" type="checkbox" id="trashSelectAll" onchange="toggleAllTrashVisible(this.checked)" aria-label="Select all visible trash items"></th><th>Item</th><th>Type / Category</th><th>Price</th><th>Qty</th><th>Deleted</th><th>Actions</th></tr></thead><tbody id="trashRows"></tbody></table></div>
 <div class="import-load-more" style="margin-top:14px">
   <span class="note" id="trashVisibleCount"></span>
   <button class="secondary" id="trashLoadMoreBtn" type="button" onclick="trashVisibleLimit+=100;renderTrash()">Show 100 more</button>
@@ -813,44 +814,43 @@ async function deleteSelectedProducts(){
   if(!ids.length)return alert('Select at least one product first.');
   if(!confirm(`Move ${ids.length} selected product(s) to Trash?`))return;
   try{
-    for(let i=0;i<ids.length;i+=100){
-      const chunk=ids.slice(i,i+100);
-      await Promise.all(chunk.map(id=>db.collection('products').doc(String(id)).set({
-        active:false,
-        deletedAt:sbFieldValue.serverTimestamp(),
-        deletedBy:auth.currentUser?.email||''
-      },{merge:true})));
-      await yieldToBrowser();
-    }
-    productSelected.clear();
-    productsVisibleLimit=100;
-    renderProductsTable();
-  }catch(err){
-    console.error('Bulk product delete failed',err);
-    alert('Could not delete selected products: '+(err?.message||err));
-  }
+    const now=new Date().toISOString(),by=auth.currentUser?.email||'';
+    const byId=new Map(products.map(p=>[String(p.id),p]));
+    const docs=ids.map(id=>({id,data:{...(byId.get(String(id))||{}),active:false,deletedAt:now,deletedBy:by,updatedAt:now}}));
+    if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,500);
+    else await Promise.all(ids.map(id=>db.collection('products').doc(String(id)).set({active:false,deletedAt:sbFieldValue.serverTimestamp(),deletedBy:by},{merge:true})));
+    productSelected.clear();productsVisibleLimit=100;renderProductsTable();
+  }catch(err){console.error('Bulk product delete failed',err);alert('Could not delete selected products: '+(err?.message||err));}
 }
 async function deleteAllProducts(){
   if(!products.length)return alert('There are no products to delete.');
   if(!confirm(`Move ALL ${products.length} products to Trash?`))return;
   try{
-    const ids=products.map(p=>String(p.id));
-    for(let i=0;i<ids.length;i+=100){
-      const chunk=ids.slice(i,i+100);
-      await Promise.all(chunk.map(id=>db.collection('products').doc(String(id)).set({
-        active:false,
-        deletedAt:sbFieldValue.serverTimestamp(),
-        deletedBy:auth.currentUser?.email||''
-      },{merge:true})));
-      await yieldToBrowser();
+    const now=new Date().toISOString(),by=auth.currentUser?.email||'';
+    const docs=products.map(p=>({id:String(p.id),data:{...p,active:false,deletedAt:now,deletedBy:by,updatedAt:now}}));
+    if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,500);
+    else await Promise.all(products.map(p=>db.collection('products').doc(String(p.id)).set({active:false,deletedAt:sbFieldValue.serverTimestamp(),deletedBy:by},{merge:true})));
+    productSelected.clear();productsVisibleLimit=100;renderProductsTable();
+  }catch(err){console.error('Delete all products failed',err);alert('Could not delete all products: '+(err?.message||err));}
+}
+async function purgeAllProductsForever(){
+  const all=[...products,...trashProducts];
+  const ids=[...new Set(all.map(p=>String(p.id)).filter(Boolean))];
+  if(!ids.length)return alert('There are no product records to clear.');
+  if(!confirm(`PERMANENTLY DELETE ALL ${ids.length} PRODUCT RECORDS from the admin and customer website? This cannot be undone.`))return;
+  if(!confirm('Final confirmation: clear the entire product catalog now?'))return;
+  try{
+    if(typeof db.bulkDelete==='function')await db.bulkDelete('products',ids,800);
+    else{for(let i=0;i<ids.length;i+=100)await Promise.all(ids.slice(i,i+100).map(id=>db.collection('products').doc(id).delete()));}
+    products=[];trashProducts=[];productSelected.clear();trashSelected.clear();productsVisibleLimit=100;trashVisibleLimit=100;
+    // Deleted category records can keep stale product IDs; strip them in one write.
+    if(deletedCategories.length){
+      deletedCategories=deletedCategories.map(c=>({...c,productIds:[]}));
+      await db.collection('settings').doc('catalog').set({deletedCategories,updatedAt:sbFieldValue.serverTimestamp()},{merge:true});
     }
-    productSelected.clear();
-    productsVisibleLimit=100;
-    renderProductsTable();
-  }catch(err){
-    console.error('Delete all products failed',err);
-    alert('Could not delete all products: '+(err?.message||err));
-  }
+    renderAll();
+    alert(`Product catalog cleared. ${ids.length} product record(s) were permanently deleted.`);
+  }catch(err){console.error('Clear all product data failed',err);alert('Could not clear all product data: '+(err?.message||err));}
 }
 function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>{const img=new Image();img.onerror=reject;img.onload=()=>{const max=700,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',.7))};img.src=reader.result};reader.readAsDataURL(file)})}async function readFiles(files){const selected=[...files].slice(0,3);return Promise.all(selected.map(compressImage))}async function previewSelectedImages(){let imgs=await readFiles($('aImages').files);$('imagePreview').innerHTML=[...editingImages,...imgs].slice(0,3).map(i=>`<img src="${i}">`).join('')}
 async function writeAudit(action,product,before={}){try{await db.collection('auditLogs').add({action,productId:String(product.id||editingId||''),productName:product.name||'',before,after:product,adminEmail:auth.currentUser?.email||'',createdAt:sbFieldValue.serverTimestamp()})}catch(e){console.warn('Audit log unavailable',e)}}
@@ -1017,77 +1017,71 @@ async function undoLastDelete(){if(!undoProductId)return;const id=undoProductId;
 async function restoreProduct(id,ask=true){const p=trashProducts.find(x=>String(x.id)===String(id));if(!p)return;if(ask&&!confirm(`Restore ${p.name||'this product'} to the customer website?`))return;try{await db.collection('products').doc(String(id)).set({active:true,deletedAt:sbFieldValue.delete(),deletedBy:sbFieldValue.delete(),updatedAt:sbFieldValue.serverTimestamp()},{merge:true});trashSelected.delete(trashKey('product',id));await writeAudit('Product restored from Trash',{...p,active:true},p)}catch(err){alert('Could not restore product: '+err.message)}}
 async function permanentlyDeleteProduct(id,ask=true){const p=trashProducts.find(x=>String(x.id)===String(id));if(!p)return;if(ask&&!confirm(`Permanently delete ${p.name||'this product'}? This cannot be undone.`))return;try{await db.collection('products').doc(String(id)).delete();trashSelected.delete(trashKey('product',id));await writeAudit('Product permanently deleted',p,p)}catch(err){alert('Could not permanently delete product: '+err.message)}}
 async function restoreCategory(name,ask=true){
-  const c=deletedCategories.find(x=>String(x.name)===String(name));
-  if(!c)return;
+  const c=deletedCategories.find(x=>String(x.name)===String(name));if(!c)return;
   const ids=(c.productIds||[]).map(String);
   if(ask&&!confirm(`Restore the category “${name}”${ids.length?` and all ${ids.length} product(s) inside it`:''}?`))return;
-
   try{
     const nextCategories=normalizeCategories([...categories,name]);
     const nextDeleted=deletedCategories.filter(x=>String(x.name)!==String(name));
-
-    // Restore every product linked to this deleted category.
-    for(let i=0;i<ids.length;i+=100){
-      const chunk=ids.slice(i,i+100);
-      await Promise.all(chunk.map(id=>db.collection('products').doc(id).set({
-        cat:name,
-        active:true,
-        deletedAt:sbFieldValue.delete(),
-        deletedBy:sbFieldValue.delete(),
-        deletedWithCategory:sbFieldValue.delete(),
-        updatedAt:sbFieldValue.serverTimestamp()
-      },{merge:true})));
-      await yieldToBrowser();
+    if(ids.length){
+      const now=new Date().toISOString(),byId=new Map(trashProducts.map(p=>[String(p.id),p]));
+      const docs=ids.map(id=>({id,data:{...(byId.get(id)||{}),cat:name,active:true,updatedAt:now}}));
+      if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,500);
+      else await Promise.all(ids.map(id=>db.collection('products').doc(id).set({cat:name,active:true,deletedAt:sbFieldValue.delete(),deletedBy:sbFieldValue.delete(),deletedWithCategory:sbFieldValue.delete(),updatedAt:sbFieldValue.serverTimestamp()},{merge:true})));
     }
-
-    await db.collection('settings').doc('catalog').set({
-      categories:nextCategories,
-      deletedCategories:nextDeleted,
-      updatedAt:sbFieldValue.serverTimestamp()
-    },{merge:true});
-
-    // Remove restored product/category selections from Trash UI.
-    trashSelected.delete(trashKey('category',name));
-    ids.forEach(id=>trashSelected.delete(trashKey('product',id)));
-    trashVisibleLimit=100;
-  }catch(err){
-    console.error('Could not restore category and products',err);
-    alert('Could not restore category: '+(err?.message||err));
-  }
+    await db.collection('settings').doc('catalog').set({categories:nextCategories,deletedCategories:nextDeleted,updatedAt:sbFieldValue.serverTimestamp()},{merge:true});
+    trashSelected.delete(trashKey('category',name));ids.forEach(id=>trashSelected.delete(trashKey('product',id)));trashVisibleLimit=100;
+  }catch(err){console.error('Could not restore category and products',err);alert('Could not restore category: '+(err?.message||err));}
 }
-
 async function permanentlyDeleteCategory(name,ask=true){
-  const c=deletedCategories.find(x=>String(x.name)===String(name));
-  if(!c)return;
+  const c=deletedCategories.find(x=>String(x.name)===String(name));if(!c)return;
   const ids=(c.productIds||[]).map(String);
-  const wording=ids.length
-    ? `Permanently delete the category “${name}” and its ${ids.length} linked product(s)? This cannot be undone.`
-    : `Permanently delete the category “${name}”? This cannot be undone.`;
+  const wording=ids.length?`Permanently delete the category “${name}” and its ${ids.length} linked product(s)? This cannot be undone.`:`Permanently delete the category “${name}”? This cannot be undone.`;
   if(ask&&!confirm(wording))return;
-
   try{
-    // Permanently remove all products that were deleted together with this category.
-    for(let i=0;i<ids.length;i+=100){
-      const chunk=ids.slice(i,i+100);
-      await Promise.all(chunk.map(id=>db.collection('products').doc(id).delete()));
-      await yieldToBrowser();
-    }
-
-    await saveCategories(
-      categories.filter(x=>String(x)!==String(name)),
-      deletedCategories.filter(x=>String(x.name)!==String(name))
-    );
-
-    trashSelected.delete(trashKey('category',name));
-    ids.forEach(id=>trashSelected.delete(trashKey('product',id)));
-  }catch(err){
-    console.error('Could not permanently delete category and products',err);
-    alert('Could not permanently delete category: '+(err?.message||err));
-  }
+    if(ids.length){if(typeof db.bulkDelete==='function')await db.bulkDelete('products',ids,800);else await Promise.all(ids.map(id=>db.collection('products').doc(id).delete()));}
+    await saveCategories(categories.filter(x=>String(x)!==String(name)),deletedCategories.filter(x=>String(x.name)!==String(name)));
+    trashSelected.delete(trashKey('category',name));ids.forEach(id=>trashSelected.delete(trashKey('product',id)));
+  }catch(err){console.error('Could not permanently delete category and products',err);alert('Could not permanently delete category: '+(err?.message||err));}
 }
-
-async function restoreSelectedTrash(){const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');if(!confirm(`Restore ${items.length} selected item(s)?`))return;for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')await restoreProduct(id,false);else if(type==='category')await restoreCategory(id,false)}clearTrashSelection()}
-async function deleteSelectedTrashForever(){const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');if(!confirm(`Permanently delete ${items.length} selected item(s)? This cannot be undone.`))return;for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')await permanentlyDeleteProduct(id,false);else if(type==='category')await permanentlyDeleteCategory(id,false)}clearTrashSelection()}
+async function restoreSelectedTrash(){
+  const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');
+  if(!confirm(`Restore ${items.length} selected item(s)?`))return;
+  try{
+    const productIds=new Set(),catNames=[];
+    for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')productIds.add(id);else if(type==='category')catNames.push(id);}
+    const catByProduct=new Map();
+    for(const name of catNames){const c=deletedCategories.find(x=>String(x.name)===String(name));(c?.productIds||[]).forEach(id=>{productIds.add(String(id));catByProduct.set(String(id),name);});}
+    const now=new Date().toISOString(),byId=new Map(trashProducts.map(p=>[String(p.id),p]));
+    const docs=[...productIds].map(id=>{const p=byId.get(id)||{};return{id,data:{...p,cat:catByProduct.get(id)||p.cat,active:true,updatedAt:now}}});
+    if(docs.length){if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,500);else await Promise.all(docs.map(x=>db.collection('products').doc(x.id).set({active:true,updatedAt:sbFieldValue.serverTimestamp()},{merge:true})));}
+    if(catNames.length){const names=new Set(catNames);await db.collection('settings').doc('catalog').set({categories:normalizeCategories([...categories,...catNames]),deletedCategories:deletedCategories.filter(c=>!names.has(String(c.name))),updatedAt:sbFieldValue.serverTimestamp()},{merge:true});}
+    clearTrashSelection();
+  }catch(err){console.error('Restore selected failed',err);alert('Could not restore selected items: '+(err?.message||err));}
+}
+async function restoreAllTrash(){
+  const total=trashProducts.length+deletedCategories.length;if(!total)return alert('Trash is already empty.');
+  if(!confirm(`Restore EVERYTHING in Trash (${total} item(s))?`))return;
+  try{
+    const catByProduct=new Map();deletedCategories.forEach(c=>(c.productIds||[]).forEach(id=>catByProduct.set(String(id),String(c.name))));
+    const now=new Date().toISOString();
+    const docs=trashProducts.map(p=>({id:String(p.id),data:{...p,cat:catByProduct.get(String(p.id))||p.cat,active:true,updatedAt:now}}));
+    if(docs.length){if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,500);else await Promise.all(docs.map(x=>db.collection('products').doc(x.id).set({active:true,updatedAt:sbFieldValue.serverTimestamp()},{merge:true})));}
+    if(deletedCategories.length)await db.collection('settings').doc('catalog').set({categories:normalizeCategories([...categories,...deletedCategories.map(c=>c.name)]),deletedCategories:[],updatedAt:sbFieldValue.serverTimestamp()},{merge:true});
+    trashSelected.clear();trashVisibleLimit=100;renderTrash();
+  }catch(err){console.error('Restore all failed',err);alert('Could not restore all Trash items: '+(err?.message||err));}
+}
+async function deleteSelectedTrashForever(){
+  const items=[...trashSelected];if(!items.length)return alert('Select at least one item first.');
+  if(!confirm(`Permanently delete ${items.length} selected item(s)? This cannot be undone.`))return;
+  try{
+    const productIds=new Set(),catNames=new Set();
+    for(const key of items){const [type,...parts]=key.split(':'),id=parts.join(':');if(type==='product')productIds.add(id);else if(type==='category'){catNames.add(id);const c=deletedCategories.find(x=>String(x.name)===id);(c?.productIds||[]).forEach(x=>productIds.add(String(x)));}}
+    const ids=[...productIds];if(ids.length){if(typeof db.bulkDelete==='function')await db.bulkDelete('products',ids,800);else await Promise.all(ids.map(id=>db.collection('products').doc(id).delete()));}
+    if(catNames.size)await db.collection('settings').doc('catalog').set({categories:categories.filter(x=>!catNames.has(String(x))),deletedCategories:deletedCategories.filter(c=>!catNames.has(String(c.name))),updatedAt:sbFieldValue.serverTimestamp()},{merge:true});
+    clearTrashSelection();
+  }catch(err){console.error('Delete selected forever failed',err);alert('Could not delete selected items: '+(err?.message||err));}
+}
 async function deleteAllTrashForever(){
   // IMPORTANT: take a frozen snapshot first. Realtime listeners update trashProducts
   // while deletes are running, so looking items up again can make a bulk clear stop early.
