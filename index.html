@@ -462,11 +462,31 @@ function syncCustomerSavedItemsToLiveProducts(){
   }catch(e){}
   updateCartCount();updateWishlistCount();
 }
+function bundledProductFor(p){
+  if(!p)return null;
+  const list=window.NADINE_PRELOADED_PRODUCTS||[];
+  const id=String(p.id||'');
+  const name=String(p.name||'').trim().toLowerCase().replace(/\s+/g,' ');
+  return list.find(x=>String(x.id||'')===id) || list.find(x=>String(x.name||'').trim().toLowerCase().replace(/\s+/g,' ')===name) || null;
+}
+function mergeBundledCatalogData(p){
+  if(!p)return p;
+  const bundled=bundledProductFor(p);
+  if(!bundled)return p;
+  const merged={...p};
+  const cat=String(merged.cat||'').trim();
+  if(!cat || /^uncategori[sz]ed$/i.test(cat) || /^needs review$/i.test(cat)) merged.cat=bundled.cat||merged.cat||'para';
+  const imgs=Array.isArray(merged.images)?merged.images.filter(Boolean):[];
+  const badImages=!imgs.length || imgs.every(u=>/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u||'')));
+  if(badImages && Array.isArray(bundled.images) && bundled.images.length) merged.images=[...bundled.images];
+  return merged;
+}
 function applyCustomerProducts(rows){
   products=(rows||[])
     .map(r=>{
-      const p=r&&r.data!==undefined?{id:r.doc_id,...(r.data||{})}:r;
+      let p=r&&r.data!==undefined?{id:r.doc_id,...(r.data||{})}:r;
       if(!p)return null;
+      p=mergeBundledCatalogData(p);
       const cat=String(p.cat||'').trim();
       if(!cat||/^uncategori[sz]ed$/i.test(cat))p.cat='para';
       return p;

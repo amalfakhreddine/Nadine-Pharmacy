@@ -84,6 +84,7 @@ main{max-width:1180px;margin:0 auto;padding:30px 20px 60px}
 </main>
 <div class="toast" id="toast">Added to cart</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="preloaded-products.js"></script>
 <script>
 function stableProductImageUrl(url){
   if(!url) return '';
@@ -123,7 +124,26 @@ const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u03
 const productId=new URLSearchParams(location.search).get('id');
 let current=null,sessionUser=null;
 
-function docProduct(row){return row?{id:row.doc_id,...(row.data||{})}:null}
+function bundledProductFor(p){
+  if(!p)return null;
+  const list=window.NADINE_PRELOADED_PRODUCTS||[];
+  const id=String(p.id||'');
+  const name=String(p.name||'').trim().toLowerCase().replace(/\s+/g,' ');
+  return list.find(x=>String(x.id||'')===id) || list.find(x=>String(x.name||'').trim().toLowerCase().replace(/\s+/g,' ')===name) || null;
+}
+function mergeBundledCatalogData(p){
+  if(!p)return p;
+  const bundled=bundledProductFor(p);
+  if(!bundled)return p;
+  const merged={...p};
+  const cat=String(merged.cat||'').trim();
+  if(!cat || /^uncategori[sz]ed$/i.test(cat) || /^needs review$/i.test(cat)) merged.cat=bundled.cat||merged.cat||'para';
+  const imgs=Array.isArray(merged.images)?merged.images.filter(Boolean):[];
+  const badImages=!imgs.length || imgs.every(u=>/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u||'')));
+  if(badImages && Array.isArray(bundled.images) && bundled.images.length) merged.images=[...bundled.images];
+  return merged;
+}
+function docProduct(row){return row?mergeBundledCatalogData({id:row.doc_id,...(row.data||{})}):null}
 function inStock(p){return p&&(p.stockUnlimited===true||p.stock==null||p.stock===''||Number(p.stock)>0)}
 function composition(p){return p.genericName||p.activeIngredient||p.meta||''}
 function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
@@ -272,8 +292,8 @@ async function init(){
     const comp=composition(current);if(comp){$('composition').style.display='block';$('composition').innerHTML='<b>Composition / details:</b> '+esc(comp)}
     $('description').textContent=current.description||'Product details are available from Nadine Parapharm. Contact us if you would like help choosing the right option for your needs.';
     const imgs=current.images||[];
-    $('gallery').innerHTML=imgs[0]?`<img id="mainImage" src="${esc(imgs[0])}" alt="${esc(current.name)}">`:`<div class="fake">${esc(current.name)}</div>`;
-    $('thumbs').innerHTML=imgs.length>1?imgs.map(x=>`<img src="${esc(x)}" onclick="document.getElementById('mainImage').src=this.src" alt="">`).join(''):'';
+    $('gallery').innerHTML=imgs[0]?`<img id="mainImage" src="${esc(stableProductImageUrl(imgs[0]))}" data-original-src="${esc(imgs[0])}" referrerpolicy="no-referrer" onerror="productImgError(this)" alt="${esc(current.name)}">`:`<div class="fake">${esc(current.name)}</div>`;
+    $('thumbs').innerHTML=imgs.length>1?imgs.map(x=>`<img src="${esc(stableProductImageUrl(x))}" data-original-src="${esc(x)}" referrerpolicy="no-referrer" onerror="productImgError(this)" onclick="document.getElementById('mainImage').src=this.src" alt="">`).join(''):'';
     $('addBtn').disabled=!inStock(current);$('addBtn').textContent=inStock(current)?'Add to cart':'Sold out';$('addBtn').onclick=addToCart;$('wishBtn').onclick=toggleProductWishlist;await refreshWishlistButton();
     $('state').style.display='none';$('content').style.display='block';
 
