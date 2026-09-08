@@ -704,6 +704,33 @@ function bundledCategoryForAdminProduct(p){
   const hit=list.find(x=>String(x.id||'')===id)||list.find(x=>normalizedProductNameKey(x.name)===key);
   return String(hit?.cat||'').trim();
 }
+function bundledDescriptionForAdminProduct(p){
+  const list=window.NADINE_PRELOADED_PRODUCTS||[];
+  const id=String(p?.id||'');
+  const key=normalizedProductNameKey(p?.name);
+  const hit=list.find(x=>String(x.id||'')===id)||list.find(x=>normalizedProductNameKey(x.name)===key);
+  return String(hit?.description||'').trim();
+}
+let descriptionRepairRunning=false;
+let descriptionRepairDone=false;
+async function persistMissingProductDescriptions(rawProducts){
+  if(descriptionRepairRunning||descriptionRepairDone)return;
+  const missing=(rawProducts||[]).filter(p=>!String(p?.description||'').trim() && bundledDescriptionForAdminProduct(p));
+  if(!missing.length){descriptionRepairDone=true;return;}
+  descriptionRepairRunning=true;
+  try{
+    const docs=missing.map(p=>({id:String(p.id),data:{description:bundledDescriptionForAdminProduct(p),updatedAt:new Date().toISOString()}}));
+    if(typeof db.bulkUpsert==='function'){
+      for(let i=0;i<docs.length;i+=800)await db.bulkUpsert('products',docs.slice(i,i+800),400);
+    }else{
+      for(let i=0;i<docs.length;i+=100)await Promise.all(docs.slice(i,i+100).map(x=>db.collection('products').doc(x.id).set(x.data,{merge:true})));
+    }
+    await db.collection('settings').doc('catalog').set({descriptionsMigratedAt:new Date().toISOString(),descriptionsMigratedCount:docs.length,updatedAt:new Date().toISOString()},{merge:true});
+    descriptionRepairDone=true;
+    console.info(`Added descriptions to ${docs.length} product(s).`);
+  }catch(err){console.error('Could not add product descriptions',err)}
+  finally{descriptionRepairRunning=false;}
+}
 function repairedCategoryForProduct(p){
   const cat=String(p?.cat||'').trim();
   if(cat && !/^needs review$/i.test(cat) && !/^uncategori[sz]ed$/i.test(cat) && cat.toLowerCase()!=='para')return cat;
@@ -744,6 +771,7 @@ function startCatalogListeners(){if(unsubscribeProducts)unsubscribeProducts();if
   trashProducts=all.filter(p=>p.active===false);
   renderAll();
   persistNeedsReviewCategoryRepairs(raw);
+  persistMissingProductDescriptions(raw);
 },err=>alert('Products could not load: '+err.message));unsubscribeSettings=db.collection('settings').doc('catalog').onSnapshot(doc=>{const data=doc.exists?doc.data():{};categories=Array.isArray(data.categories)?normalizeCategories(data.categories):[];deletedCategories=Array.isArray(data.deletedCategories)?data.deletedCategories.filter(x=>x&&x.name):[];categorySubcategories=(data.categorySubcategories&&typeof data.categorySubcategories==='object')?data.categorySubcategories:{};hiddenMedicalDeviceSubcategories=Array.isArray(data.medicalDeviceHiddenSubcategories)?data.medicalDeviceHiddenSubcategories:[];renderAll()},err=>console.error('Categories could not load from Supabase',err));db.collection('settings').doc('shop').onSnapshot(doc=>{if(doc.exists)shopSettings={...shopSettings,...doc.data()};renderShopSettings()},err=>alert('Shop settings could not load: '+err.message));db.collection('profiles').onSnapshot(s=>{profiles=s.docs.map(d=>({id:d.id,...d.data()}));renderCustomers()},e=>console.warn('Profiles could not load',e));db.collection('settings').doc('adminAccess').onSnapshot(doc=>{const emails=doc.exists&&Array.isArray(doc.data().adminEmails)?doc.data().adminEmails:[];if($('adminEmailSetting'))$('adminEmailSetting').value=(emails.length?emails:[auth.currentUser?.email||'']).filter(Boolean).join('\n')},err=>console.error('Admin access settings could not load',err))}
 function normalizeCategories(list){
   const seen=new Set();

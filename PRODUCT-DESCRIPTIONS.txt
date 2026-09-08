@@ -1,0 +1,1 @@
+All 2,236 bundled products now include website descriptions. Empty descriptions already stored in Supabase are automatically filled on the first authorized Admin load. Existing manually-written descriptions are preserved.

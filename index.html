@@ -514,6 +514,7 @@ function mergeBundledCatalogData(p){
   const imgs=Array.isArray(merged.images)?merged.images.filter(Boolean):[];
   const badImages=!imgs.length || imgs.every(u=>/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u||'')));
   if(badImages && Array.isArray(bundled.images) && bundled.images.length) merged.images=[...bundled.images];
+  if(!String(merged.description||'').trim() && String(bundled.description||'').trim()) merged.description=bundled.description;
   return merged;
 }
 function applyCustomerProducts(rows){
