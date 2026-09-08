@@ -694,16 +694,56 @@ async function ensureBundledCatalogSeeded(){
     categories:cats
   },{merge:true});
 }
+let needsReviewRepairRunning=false;
+let needsReviewRepairDone=false;
+function normalizedProductNameKey(v){return String(v||'').trim().toLowerCase().replace(/\s+/g,' ')}
+function bundledCategoryForAdminProduct(p){
+  const list=window.NADINE_PRELOADED_PRODUCTS||[];
+  const id=String(p?.id||'');
+  const key=normalizedProductNameKey(p?.name);
+  const hit=list.find(x=>String(x.id||'')===id)||list.find(x=>normalizedProductNameKey(x.name)===key);
+  return String(hit?.cat||'').trim();
+}
+function repairedCategoryForProduct(p){
+  const cat=String(p?.cat||'').trim();
+  if(cat && !/^needs review$/i.test(cat) && !/^uncategori[sz]ed$/i.test(cat) && cat.toLowerCase()!=='para')return cat;
+  const smart=smartCategoryFromName(p?.name||'','');
+  if(smart && smart!=='General Wellness')return smart;
+  const bundled=bundledCategoryForAdminProduct(p);
+  if(bundled && !/^needs review$/i.test(bundled) && !/^uncategori[sz]ed$/i.test(bundled) && bundled.toLowerCase()!=='para')return bundled;
+  return 'Wellness';
+}
+async function persistNeedsReviewCategoryRepairs(rawProducts){
+  if(needsReviewRepairRunning||needsReviewRepairDone)return;
+  const broken=(rawProducts||[]).filter(p=>{const c=String(p?.cat||'').trim();return !c||/^needs review$/i.test(c)||/^uncategori[sz]ed$/i.test(c)||c.toLowerCase()==='para'});
+  if(!broken.length){needsReviewRepairDone=true;return;}
+  needsReviewRepairRunning=true;
+  try{
+    const docs=broken.map(p=>({id:String(p.id),data:{cat:repairedCategoryForProduct(p),updatedAt:new Date().toISOString()}}));
+    if(typeof db.bulkUpsert==='function'){
+      for(let i=0;i<docs.length;i+=800)await db.bulkUpsert('products',docs.slice(i,i+800),400);
+    }else{
+      for(let i=0;i<docs.length;i+=100){
+        const chunk=docs.slice(i,i+100);
+        await Promise.all(chunk.map(x=>db.collection('products').doc(x.id).set(x.data,{merge:true})));
+      }
+    }
+    const fixedCats=[...new Set(docs.map(x=>x.data.cat).filter(Boolean))];
+    const nextCats=normalizeCategories([...categories,...defaultCategories,...fixedCats]);
+    await db.collection('settings').doc('catalog').set({categories:nextCats,needsReviewMigratedAt:new Date().toISOString(),needsReviewMigratedCount:docs.length,updatedAt:new Date().toISOString()},{merge:true});
+    categories=nextCats;
+    needsReviewRepairDone=true;
+    console.info(`Reclassified ${docs.length} product(s) out of Needs Review.`);
+  }catch(err){console.error('Could not repair Needs Review categories',err)}
+  finally{needsReviewRepairRunning=false;}
+}
 function startCatalogListeners(){if(unsubscribeProducts)unsubscribeProducts();if(unsubscribeSettings)unsubscribeSettings();unsubscribeProducts=db.collection('products').orderBy('name').onSnapshot(snap=>{
-  const all=snap.docs.map(d=>{
-    const p={id:d.id,...d.data()};
-    const cat=String(p.cat||'').trim();
-    if(!cat||/^uncategori[sz]ed$/i.test(cat))p.cat='para';
-    return p;
-  });
+  const raw=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const all=raw.map(p=>{p.cat=repairedCategoryForProduct(p);return p;});
   products=all.filter(p=>p.active!==false);
   trashProducts=all.filter(p=>p.active===false);
   renderAll();
+  persistNeedsReviewCategoryRepairs(raw);
 },err=>alert('Products could not load: '+err.message));unsubscribeSettings=db.collection('settings').doc('catalog').onSnapshot(doc=>{const data=doc.exists?doc.data():{};categories=Array.isArray(data.categories)?normalizeCategories(data.categories):[];deletedCategories=Array.isArray(data.deletedCategories)?data.deletedCategories.filter(x=>x&&x.name):[];categorySubcategories=(data.categorySubcategories&&typeof data.categorySubcategories==='object')?data.categorySubcategories:{};hiddenMedicalDeviceSubcategories=Array.isArray(data.medicalDeviceHiddenSubcategories)?data.medicalDeviceHiddenSubcategories:[];renderAll()},err=>console.error('Categories could not load from Supabase',err));db.collection('settings').doc('shop').onSnapshot(doc=>{if(doc.exists)shopSettings={...shopSettings,...doc.data()};renderShopSettings()},err=>alert('Shop settings could not load: '+err.message));db.collection('profiles').onSnapshot(s=>{profiles=s.docs.map(d=>({id:d.id,...d.data()}));renderCustomers()},e=>console.warn('Profiles could not load',e));db.collection('settings').doc('adminAccess').onSnapshot(doc=>{const emails=doc.exists&&Array.isArray(doc.data().adminEmails)?doc.data().adminEmails:[];if($('adminEmailSetting'))$('adminEmailSetting').value=(emails.length?emails:[auth.currentUser?.email||'']).filter(Boolean).join('\n')},err=>console.error('Admin access settings could not load',err))}
 function normalizeCategories(list){
   const seen=new Set();
@@ -711,7 +751,7 @@ function normalizeCategories(list){
     .map(v=>String(v||'').trim())
     .filter(v=>{
       const key=v.toLowerCase();
-      if(!v||key==='uncategorized'||key==='uncategorised')return false;
+      if(!v||key==='uncategorized'||key==='uncategorised'||key==='needs review'||key==='para')return false;
       if(seen.has(key))return false;
       seen.add(key);return true;
     });

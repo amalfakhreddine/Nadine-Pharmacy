@@ -500,7 +500,7 @@ function smartCategoryFromName(name,currentCat=''){
     ['Accessories',/\b(organizer|case|brush|scissors|water bag|hot water bag|cushion)\b/]
   ];
   for(const [cat,re] of rules){if(re.test(t))return cat;}
-  return 'General Wellness';
+  return 'Wellness';
 }
 
 function mergeBundledCatalogData(p){
