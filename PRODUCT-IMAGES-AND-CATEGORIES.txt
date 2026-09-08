@@ -1,0 +1,9 @@
+NADINE PARAPHARM - PRODUCTS READY
+
+- 2,236 preloaded products
+- Every preloaded product has an automatic web-search product image URL based on the exact product name
+- No preloaded product uses the "Needs Review" category
+- Products are automatically classified into normal storefront categories
+- Admin + customer site both use the same preloaded catalog
+
+Note: remote search thumbnails depend on an internet connection when the site loads.
