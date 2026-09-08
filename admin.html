@@ -309,7 +309,7 @@ body:has(#shell.show) #login{display:none!important;}
 
       <div class="keyword-manager">
         <h3>2. Smart classification & category rules</h3>
-        <div class="muted">SoftPharm can send these products as <b>para</b>. The website re-classifies them into useful sub-categories from their names. Rules handle obvious products; anything uncertain goes to <b>Needs Review</b>. You can add your own rules and manually move any product.</div>
+        <div class="muted">SoftPharm can send these products as <b>para</b>. The website re-classifies them into useful sub-categories from their names. Rules handle obvious products; anything unmatched is placed into a suitable automatically-created category. You can add your own rules and manually move any product.</div>
         <div class="keyword-toolbar">
           <select id="softpharmKeywordFilter" onchange="previewKeywordMatches()"></select>
           <button class="save" type="button" onclick="selectSoftPharmKeyword(true)">Select keyword</button>
@@ -342,7 +342,7 @@ body:has(#shell.show) #login{display:none!important;}
         <button class="secondary" type="button" onclick="clearSoftPharmImport()">Clear file</button>
         <span id="importProgress"></span>
       </div>
-      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. Categories are detected automatically using the keyword groups above; unmatched products go to <b>Needs Review</b>. Products that already exist on the website are detected by name/barcode and never duplicated. You get a notification and, if selected, you can choose whether to update them or keep the existing version unchanged. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products that cannot be confidently classified go to <b>Needs Review</b>. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
+      <div class="import-note"><b>Fast manual import:</b> use “Select all products” or “Select visible”, then untick anything you do not want before importing. Categories are detected automatically using the keyword groups above; unmatched products are automatically placed into a suitable category. Products that already exist on the website are detected by name/barcode and never duplicated. You get a notification and, if selected, you can choose whether to update them or keep the existing version unchanged. LBP prices are converted to USD at LBP ÷ 90,000, while USD prices stay unchanged. Products that do not match an existing rule are placed into a suitable fallback category instead. <span class="note">PDF parser fix v3 · 16k performance mode · full Supabase pagination</span></div>
     </div>
   </div>
 </section>
@@ -389,7 +389,7 @@ if(supabaseReady){auth=window.nadineAuth;db=window.nadineDb;}
 function requireSupabase(){if(!supabaseReady){alert('Supabase is not configured.');return false}return true}
 
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
-const defaultCategories=['Skincare','Baby Care','Cosmetics','Hair Care','Personal Care','Oral Care','Vitamins & Supplements','Wellness','Hygiene','Medical Devices','Nutrition','Accessories'];
+const defaultCategories=['Skincare','Sun Care','Eye Care','Baby Care','Baby Feeding','Mother & Maternity','Cosmetics','Hair Care','Personal Care','Feminine Care','Men’s Care','Nail Care','Foot Care','Oral Care','Vitamins & Supplements','Wellness','General Wellness','Sexual Wellness','Hygiene','Medical Devices','Medical Supplies','First Aid & Wound Care','Nutrition','Accessories'];
 // Medical-device subcategory support used by manual add + SoftPharm import.
 const MEDICAL_DEVICE_SUBCATEGORIES=['Blood Pressure Monitors','Blood Glucose Meters','Glucose Test Strips','Thermometers','Pulse Oximeters','Nebulizers','Scales','First Aid & Wound Care','Supports & Braces','Medical Accessories','Other Medical Devices'];
 let hiddenMedicalDeviceSubcategories=[];
@@ -434,12 +434,46 @@ function loadSoftPharmKeywordGroups(){
 function saveSoftPharmKeywordGroups(){localStorage.setItem(SOFTPHARM_KEYWORD_STORAGE,JSON.stringify(softpharmKeywordGroups))}
 function keywordHaystack(name){return ' '+String(name||'').toLowerCase().replace(/[^a-z0-9+\-]+/g,' ')+' '}
 function keywordGroupMatchesName(group,name){const h=keywordHaystack(name);return (group?.terms||[]).some(t=>{const q=String(t||'').toLowerCase().trim();if(!q)return false;return h.includes(' '+q+' ')||h.includes(q)})}
+
+function smartCategoryFromName(name,currentCat=''){
+  const raw=String(name||'');
+  const t=(' '+raw.toLowerCase().replace(/[^a-z0-9+]+/g,' ')+' ');
+  const current=String(currentCat||'').trim();
+  if(current && !/^needs review$/i.test(current) && !/^uncategori[sz]ed$/i.test(current) && current.toLowerCase()!=='para') return current;
+  const rules=[
+    ['Eye Care',/\b(eye drops?|ophthalm|artelac|soflens|contact lens|lens solution|eye patch|ocular|eyelid)\b/],
+    ['Feminine Care',/\b(intimate|feminine|vaginal|gyn|sanitary|period|panty liner|menstrual)\b/],
+    ['Sun Care',/\b(sunscreen|sunblock|spf|sun tan|suntan|after sun|solar|uv )\b/],
+    ['First Aid & Wound Care',/\b(bandage|gauze|wound|dressing|plaster|first aid|medical honey|betadine|antiseptic)\b/],
+    ['Foot Care',/\b(foot|corn remover|heel|forefoot|foot file)\b/],
+    ['Nail Care',/\b(nail|acetone|polish remover|cuticle|manicure|pedicure)\b/],
+    ['Men’s Care',/\b(for men|homme|beard|after shave|aftershave|shaving)\b/],
+    ['Sexual Wellness',/\b(condom|lubricant|sexual|delay spray|intimate gel|long for men|long for women)\b/],
+    ['Mother & Maternity',/\b(mama|maternity|pregnan|breast pump|nursing|lactation)\b/],
+    ['Baby Feeding',/\b(avent|feeding bottle|bottle brush|nipple|teat|pacifier|soothie|sippy|straw bottle|milk dispenser)\b/],
+    ['Medical Supplies',/\b(gloves|syringe|needle|ostomy|coloplast|urine bag|leg bag|mask|tongue depressor)\b/],
+    ['Medical Devices',/\b(accu.?chek|glucometer|glucose meter|test strips?|blood pressure|tensiometer|thermometer|oximeter|nebulizer|scale|walker|crutch|brace|support)\b/],
+    ['Oral Care',/\b(tooth|toothpaste|toothbrush|mouthwash|mouth wash|dental|floss|interdental|dentifrice|gum care)\b/],
+    ['Hair Care',/\b(shampoo|conditioner|hair mask|hair oil|hair serum|dandruff|hair color|hair dye|scalp|anti lice|lice comb)\b/],
+    ['Baby Care',/\b(baby|infant|newborn|junior|diaper|nappy|teether|baby cream|baby wash)\b/],
+    ['Vitamins & Supplements',/\b(vitamin|multivitamin|zinc|magnesium|probiotic|omega|collagen|ginseng|melatonin|folic|biotin|calcium|iron|l carnitine|cod liver|supplement|caplets?|tablets?|capsules?)\b/],
+    ['Nutrition',/\b(protein|nutrition|meal replacement|sweetener|energy bar|formula|milk powder|electrolyte|rehydration)\b/],
+    ['Hygiene',/\b(hand wash|handwash|soap|sanitizer|sanitiser|wet wipes|wipes|tissue|cotton|alcohol 70|bath scrubber)\b/],
+    ['Personal Care',/\b(deodorant|body spray|body wash|shower gel|razor|hand cream|lip balm|body lotion)\b/],
+    ['Cosmetics',/\b(makeup|make up|mascara|foundation|concealer|lipstick|blush|eyeliner|powder)\b/],
+    ['Skincare',/\b(face|cream|serum|moistur|cleanser|acne|peel|gel|lotion|micellar|mask|aloe vera|salicylic|hyaluronic|retinol|epithelial|biology)\b/],
+    ['Accessories',/\b(organizer|case|brush|scissors|water bag|hot water bag|cushion)\b/]
+  ];
+  for(const [cat,re] of rules){if(re.test(t))return cat;}
+  return 'General Wellness';
+}
+
 function detectSoftPharmCategory(name){
   // SoftPharm may send every parapharmacy item as `para`; this website classifies it into a useful sub-category.
   const order=['oral-care','baby-care','hair-care','skincare','vitamins-supplements','medical-devices','hygiene','nutrition','personal-care'];
   for(const id of order){const g=softpharmKeywordGroups.find(x=>x.id===id);if(g&&keywordGroupMatchesName(g,name))return g.category}
   for(const g of softpharmKeywordGroups){if(!order.includes(g.id)&&keywordGroupMatchesName(g,name))return g.category}
-  return 'Needs Review';
+  return smartCategoryFromName(name,'');
 }
 function renderSoftPharmKeywordManager(){
   const sel=$('softpharmKeywordFilter'),list=$('softpharmKeywordList'),cat=$('newKeywordCategory');if(!sel||!list)return;
@@ -1898,7 +1932,7 @@ async function selectAllSoftPharm(checked){
   renderSoftPharmPreview();
   if(btn)btn.disabled=false;
 }
-function resolveImportCategory(row){ return cleanImportText(row?.category||'') || detectSoftPharmCategory(row?.name||'') || 'Needs Review'; }
+function resolveImportCategory(row){ const c=cleanImportText(row?.category||''); return smartCategoryFromName(row?.name||'',c); }
 async function importSelectedSoftPharmProducts(){
   if(!requireSupabase())return;
   const selected=[];

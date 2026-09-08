@@ -1,0 +1,1 @@
+Needs Review removed as a catalog fallback. Products are classified by name into existing or new practical categories; unmatched items use General Wellness. New imports also never fall back to Needs Review.

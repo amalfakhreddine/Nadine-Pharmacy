@@ -131,13 +131,48 @@ function bundledProductFor(p){
   const name=String(p.name||'').trim().toLowerCase().replace(/\s+/g,' ');
   return list.find(x=>String(x.id||'')===id) || list.find(x=>String(x.name||'').trim().toLowerCase().replace(/\s+/g,' ')===name) || null;
 }
+
+function smartCategoryFromName(name,currentCat=''){
+  const raw=String(name||'');
+  const t=(' '+raw.toLowerCase().replace(/[^a-z0-9+]+/g,' ')+' ');
+  const current=String(currentCat||'').trim();
+  if(current && !/^needs review$/i.test(current) && !/^uncategori[sz]ed$/i.test(current) && current.toLowerCase()!=='para') return current;
+  const rules=[
+    ['Eye Care',/\b(eye drops?|ophthalm|artelac|soflens|contact lens|lens solution|eye patch|ocular|eyelid)\b/],
+    ['Feminine Care',/\b(intimate|feminine|vaginal|gyn|sanitary|period|panty liner|menstrual)\b/],
+    ['Sun Care',/\b(sunscreen|sunblock|spf|sun tan|suntan|after sun|solar|uv )\b/],
+    ['First Aid & Wound Care',/\b(bandage|gauze|wound|dressing|plaster|first aid|medical honey|betadine|antiseptic)\b/],
+    ['Foot Care',/\b(foot|corn remover|heel|forefoot|foot file)\b/],
+    ['Nail Care',/\b(nail|acetone|polish remover|cuticle|manicure|pedicure)\b/],
+    ['Men’s Care',/\b(for men|homme|beard|after shave|aftershave|shaving)\b/],
+    ['Sexual Wellness',/\b(condom|lubricant|sexual|delay spray|intimate gel|long for men|long for women)\b/],
+    ['Mother & Maternity',/\b(mama|maternity|pregnan|breast pump|nursing|lactation)\b/],
+    ['Baby Feeding',/\b(avent|feeding bottle|bottle brush|nipple|teat|pacifier|soothie|sippy|straw bottle|milk dispenser)\b/],
+    ['Medical Supplies',/\b(gloves|syringe|needle|ostomy|coloplast|urine bag|leg bag|mask|tongue depressor)\b/],
+    ['Medical Devices',/\b(accu.?chek|glucometer|glucose meter|test strips?|blood pressure|tensiometer|thermometer|oximeter|nebulizer|scale|walker|crutch|brace|support)\b/],
+    ['Oral Care',/\b(tooth|toothpaste|toothbrush|mouthwash|mouth wash|dental|floss|interdental|dentifrice|gum care)\b/],
+    ['Hair Care',/\b(shampoo|conditioner|hair mask|hair oil|hair serum|dandruff|hair color|hair dye|scalp|anti lice|lice comb)\b/],
+    ['Baby Care',/\b(baby|infant|newborn|junior|diaper|nappy|teether|baby cream|baby wash)\b/],
+    ['Vitamins & Supplements',/\b(vitamin|multivitamin|zinc|magnesium|probiotic|omega|collagen|ginseng|melatonin|folic|biotin|calcium|iron|l carnitine|cod liver|supplement|caplets?|tablets?|capsules?)\b/],
+    ['Nutrition',/\b(protein|nutrition|meal replacement|sweetener|energy bar|formula|milk powder|electrolyte|rehydration)\b/],
+    ['Hygiene',/\b(hand wash|handwash|soap|sanitizer|sanitiser|wet wipes|wipes|tissue|cotton|alcohol 70|bath scrubber)\b/],
+    ['Personal Care',/\b(deodorant|body spray|body wash|shower gel|razor|hand cream|lip balm|body lotion)\b/],
+    ['Cosmetics',/\b(makeup|make up|mascara|foundation|concealer|lipstick|blush|eyeliner|powder)\b/],
+    ['Skincare',/\b(face|cream|serum|moistur|cleanser|acne|peel|gel|lotion|micellar|mask|aloe vera|salicylic|hyaluronic|retinol|epithelial|biology)\b/],
+    ['Accessories',/\b(organizer|case|brush|scissors|water bag|hot water bag|cushion)\b/]
+  ];
+  for(const [cat,re] of rules){if(re.test(t))return cat;}
+  return 'General Wellness';
+}
+
 function mergeBundledCatalogData(p){
   if(!p)return p;
   const bundled=bundledProductFor(p);
   if(!bundled)return p;
   const merged={...p};
   const cat=String(merged.cat||'').trim();
-  if(!cat || /^uncategori[sz]ed$/i.test(cat) || /^needs review$/i.test(cat)) merged.cat=bundled.cat||merged.cat||'para';
+  if(!cat || /^uncategori[sz]ed$/i.test(cat) || /^needs review$/i.test(cat) || /^para$/i.test(cat)) merged.cat=smartCategoryFromName(merged.name,bundled.cat||merged.cat);
+  else merged.cat=smartCategoryFromName(merged.name,merged.cat);
   const imgs=Array.isArray(merged.images)?merged.images.filter(Boolean):[];
   const badImages=!imgs.length || imgs.every(u=>/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u||'')));
   if(badImages && Array.isArray(bundled.images) && bundled.images.length) merged.images=[...bundled.images];
