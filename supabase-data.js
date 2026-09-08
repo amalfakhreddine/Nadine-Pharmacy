@@ -127,6 +127,20 @@
   }
   const db={
     collection:n=>new Collection(n),
+    bulkDelete:async(col,ids,chunkSize=500)=>{
+      const unique=[...new Set((ids||[]).map(String).filter(Boolean))];
+      for(let i=0;i<unique.length;i+=chunkSize){
+        const {error}=await sb.from('app_documents').delete().eq('collection_name',col).in('doc_id',unique.slice(i,i+chunkSize));
+        if(error)throw error;
+      }
+    },
+    bulkUpsert:async(col,docs,chunkSize=400)=>{
+      const rows=(docs||[]).map(x=>({collection_name:col,doc_id:String(x.id),data:clean(x.data),updated_at:new Date().toISOString()}));
+      for(let i=0;i<rows.length;i+=chunkSize){
+        const {error}=await sb.from('app_documents').upsert(rows.slice(i,i+chunkSize),{onConflict:'collection_name,doc_id'});
+        if(error)throw error;
+      }
+    },
     batch:()=>{const ops=[];return{
       set:(r,d,o)=>ops.push(()=>r.set(d,o)),update:(r,d)=>ops.push(()=>r.update(d)),delete:r=>ops.push(()=>r.delete()),
       commit:async()=>{for(let i=0;i<ops.length;i+=50)await Promise.all(ops.slice(i,i+50).map(f=>f()))}

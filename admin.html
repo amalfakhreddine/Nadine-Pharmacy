@@ -349,7 +349,8 @@ body:has(#shell.show) #login{display:none!important;}
 <section class="panel" id="panel-settings"><div class="heading"><div><h1>Settings</h1><div class="muted">Control checkout and account settings.</div></div></div><div class="card" style="max-width:620px"><h2>Delivery & pickup</h2><label class="field"><span>Tripoli delivery charge ($)</span><input id="deliveryFeeSetting" type="number" step="0.01" min="0"></label><label class="field"><span>Free delivery from ($)</span><input id="freeDeliverySetting" type="number" step="0.01" min="0" placeholder="Example: 25"></label><label class="checkline"><input id="deliveryEnabledSetting" type="checkbox" checked><span><b>Enable Tripoli delivery</b><br><span class="note">Delivery remains restricted to Tripoli.</span></span></label><label class="checkline" style="margin-top:10px"><input id="pickupEnabledSetting" type="checkbox" checked><span><b>Enable free parapharmacy pickup</b></span></label><button class="save" style="margin-top:12px" onclick="saveShopSettings()">Save checkout settings</button><div id="shopSettingsMessage" class="note"></div></div><div class="card" style="max-width:620px"><h2>Admin access emails</h2><p class="note">Create every admin account first in Supabase Authentication → Users. Enter one authorised email per line. Keep at least one email, and keep your current email in the list unless you intend to remove your own access.</p><label class="field"><span>Authorised admin emails</span><textarea id="adminEmailSetting" rows="5" placeholder="owner@example.com&#10;manager@example.com"></textarea></label><button class="save" onclick="saveAdminEmails()">Save admin access</button><div id="adminEmailMessage" class="note"></div></div><div class="card" style="max-width:620px"><h2>Change admin password</h2><label class="field"><span>Current password</span><input id="currentPassword" type="password"></label><label class="field"><span>New password</span><input id="newPassword" type="password"></label><label class="field"><span>Confirm new password</span><input id="confirmPassword" type="password"></label><button class="save" onclick="changePassword()">Change password</button><div id="passwordMessage" class="note"></div></div></section>
 </main></div></section>
 <div class="undo-snackbar" id="undoSnackbar"><span id="undoMessage">Product moved to Trash.</span><button type="button" onclick="undoLastDelete()">UNDO <span id="undoCountdown">30</span></button></div><div class="order-toast" id="orderToast" role="alert" aria-live="assertive"><div class="order-toast-head"><div><h3>🔔 New order received</h3><p id="orderToastText">A customer placed a new order.</p></div><button class="order-toast-close" onclick="closeOrderToast()" aria-label="Close">×</button></div><div class="order-toast-actions"><button class="save" onclick="openLatestNewOrder()">Open new orders</button><button class="secondary" onclick="closeOrderToast()">Dismiss</button></div></div><div class="receipt-overlay" id="receiptOverlay" onclick="if(event.target===this)closeReceipt()"><div class="receipt-dialog"><div class="receipt-actions"><b>Order receipt</b><div class="row-actions"><button class="secondary" onclick="window.print()">Print / Save PDF</button><button class="secondary" onclick="closeReceipt()">Close</button></div></div><div class="receipt-paper" id="receiptPaper"></div></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-data.js"></script><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="supabase-data.js"></script>
+<script src="preloaded-products.js"></script><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 
 const supabaseReady=!!window.nadineSupabase;
@@ -498,7 +499,16 @@ function openAdminApp(user){
   $('login').style.display='none';
   $('shell').classList.add('show');
   $('shell').setAttribute('aria-hidden','false');
-  if(typeof startOrdersListener==='function')startOrdersListener();if(typeof startCatalogListeners==='function')startCatalogListeners();if(typeof startReviewsListener==='function')startReviewsListener();renderAll();
+  if(typeof startOrdersListener==='function')startOrdersListener();
+  if(Array.isArray(window.NADINE_PRELOADED_PRODUCTS)&&window.NADINE_PRELOADED_PRODUCTS.length){
+    products=window.NADINE_PRELOADED_PRODUCTS.map(p=>({...p}));
+    renderAll();
+  }
+  ensureBundledCatalogSeeded()
+    .catch(err=>console.error('Preloaded catalog seed failed',err))
+    .finally(()=>{if(typeof startCatalogListeners==='function')startCatalogListeners();});
+  if(typeof startReviewsListener==='function')startReviewsListener();
+  renderAll();
 }
 function lockAdminApp(message=''){
   adminAppStarted=false;
@@ -588,6 +598,38 @@ async function testOrderNotification(){
 async function setReviewStatus(id,status){try{await db.collection('reviews').doc(id).update({status,moderatedBy:auth.currentUser?.email||'',moderatedAt:sbFieldValue.serverTimestamp(),updatedAt:sbFieldValue.serverTimestamp()})}catch(e){alert('Could not update review: '+e.message)}}
 async function replyToReview(id){const r=reviews.find(x=>x.id===id),reply=prompt('Public reply from Nadine Parapharm:',r?.adminReply||'');if(reply===null)return;try{await db.collection('reviews').doc(id).update({adminReply:reply.trim(),replyBy:auth.currentUser?.email||'',replyAt:sbFieldValue.serverTimestamp(),updatedAt:sbFieldValue.serverTimestamp()})}catch(e){alert('Could not save reply: '+e.message)}}
 async function deleteReview(id){if(!confirm('Permanently delete this review?'))return;try{await db.collection('reviews').doc(id).delete()}catch(e){alert('Could not delete review: '+e.message)}}
+async function ensureBundledCatalogSeeded(){
+  const bundled=Array.isArray(window.NADINE_PRELOADED_PRODUCTS)?window.NADINE_PRELOADED_PRODUCTS:[];
+  const version=window.NADINE_PRELOADED_CATALOG_VERSION||'';
+  if(!bundled.length||!version||!window.nadineSupabase)return;
+
+  const markerRef=db.collection('settings').doc('catalog');
+  const marker=await markerRef.get();
+  if(marker.exists&&marker.data()?.bundledCatalogSeedVersion===version)return;
+
+  // Never overwrite an existing catalog automatically. This seed is only for a
+  // fresh/empty site, which makes the ZIP safe to deploy over an existing store.
+  const {data:existing,error:existingError}=await window.nadineSupabase
+    .from('app_documents').select('doc_id').eq('collection_name','products').limit(1);
+  if(existingError)throw existingError;
+  if(existing&&existing.length){
+    await markerRef.set({bundledCatalogSeedVersion:'existing-catalog-preserved',bundledCatalogSeedCheckedAt:sbFieldValue.serverTimestamp()},{merge:true});
+    return;
+  }
+
+  const docs=bundled.map(p=>({id:String(p.id),data:{...p,preloaded:true,active:true}}));
+  if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,400);
+  else{
+    for(let i=0;i<docs.length;i+=100)await Promise.all(docs.slice(i,i+100).map(x=>db.collection('products').doc(x.id).set(x.data)));
+  }
+  const cats=[...new Set(bundled.map(p=>p.cat).filter(Boolean))];
+  await markerRef.set({
+    bundledCatalogSeedVersion:version,
+    bundledCatalogSeedCount:bundled.length,
+    bundledCatalogSeededAt:sbFieldValue.serverTimestamp(),
+    categories:cats
+  },{merge:true});
+}
 function startCatalogListeners(){if(unsubscribeProducts)unsubscribeProducts();if(unsubscribeSettings)unsubscribeSettings();unsubscribeProducts=db.collection('products').orderBy('name').onSnapshot(snap=>{
   const all=snap.docs.map(d=>{
     const p={id:d.id,...d.data()};
@@ -1559,12 +1601,6 @@ function mapSoftPharmRow(raw,index){
 
   const fileCategory=cleanImportText(importValue(raw,['category','family','group','department','section','categorie','catégorie','famille']));
   const category=fileCategory || detectSoftPharmCategory(name);
-  // Website-ready image support: if an Excel/CSV contains Image URL (or a common
-  // equivalent), keep it with the row and import it directly into product.images.
-  // This avoids embedding thousands of heavy pictures in Excel and keeps the
-  // storefront fast. Multiple URLs can be separated by | or ; (max 3).
-  const imageRaw=cleanImportText(importValue(raw,['image url','image','image link','photo url','photo','picture url','product image','imageurl']));
-  const images=imageRaw ? imageRaw.split(/[|;]/).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).slice(0,3) : [];
 
   return {
     key:String(index),
@@ -1576,7 +1612,6 @@ function mapSoftPharmRow(raw,index){
     stockDefined,
     currency:'USD',
     category,
-    images,
     raw
   };
 }
@@ -1880,13 +1915,10 @@ async function importSelectedSoftPharmProducts(){
       if(existing){
         // Merge locally from the catalog already loaded in the admin. This preserves
         // images/descriptions/manual overrides without an extra GET for every item.
-        data={...existing,...patch};
-        // Only replace existing images when the import file actually provides one.
-        if(row.images?.length)data.images=[...row.images];
-        delete data.id;
+        data={...existing,...patch}; delete data.id;
         updated++;
       }else{
-        data={genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[...(row.images||[])],createdAt:new Date().toISOString(),...patch};
+        data={genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:new Date().toISOString(),...patch};
         created++;
       }
       docs.push({id,data});
