@@ -1559,6 +1559,12 @@ function mapSoftPharmRow(raw,index){
 
   const fileCategory=cleanImportText(importValue(raw,['category','family','group','department','section','categorie','catégorie','famille']));
   const category=fileCategory || detectSoftPharmCategory(name);
+  // Website-ready image support: if an Excel/CSV contains Image URL (or a common
+  // equivalent), keep it with the row and import it directly into product.images.
+  // This avoids embedding thousands of heavy pictures in Excel and keeps the
+  // storefront fast. Multiple URLs can be separated by | or ; (max 3).
+  const imageRaw=cleanImportText(importValue(raw,['image url','image','image link','photo url','photo','picture url','product image','imageurl']));
+  const images=imageRaw ? imageRaw.split(/[|;]/).map(v=>v.trim()).filter(v=>/^https?:\/\//i.test(v)).slice(0,3) : [];
 
   return {
     key:String(index),
@@ -1570,6 +1576,7 @@ function mapSoftPharmRow(raw,index){
     stockDefined,
     currency:'USD',
     category,
+    images,
     raw
   };
 }
@@ -1873,10 +1880,13 @@ async function importSelectedSoftPharmProducts(){
       if(existing){
         // Merge locally from the catalog already loaded in the admin. This preserves
         // images/descriptions/manual overrides without an extra GET for every item.
-        data={...existing,...patch}; delete data.id;
+        data={...existing,...patch};
+        // Only replace existing images when the import file actually provides one.
+        if(row.images?.length)data.images=[...row.images];
+        delete data.id;
         updated++;
       }else{
-        data={genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[],createdAt:new Date().toISOString(),...patch};
+        data={genericName:'',activeIngredient:'',meta:'',description:'',expiry:'',images:[...(row.images||[])],createdAt:new Date().toISOString(),...patch};
         created++;
       }
       docs.push({id,data});
