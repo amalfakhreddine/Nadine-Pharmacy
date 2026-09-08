@@ -350,7 +350,37 @@ body:has(#shell.show) #login{display:none!important;}
 </main></div></section>
 <div class="undo-snackbar" id="undoSnackbar"><span id="undoMessage">Product moved to Trash.</span><button type="button" onclick="undoLastDelete()">UNDO <span id="undoCountdown">30</span></button></div><div class="order-toast" id="orderToast" role="alert" aria-live="assertive"><div class="order-toast-head"><div><h3>🔔 New order received</h3><p id="orderToastText">A customer placed a new order.</p></div><button class="order-toast-close" onclick="closeOrderToast()" aria-label="Close">×</button></div><div class="order-toast-actions"><button class="save" onclick="openLatestNewOrder()">Open new orders</button><button class="secondary" onclick="closeOrderToast()">Dismiss</button></div></div><div class="receipt-overlay" id="receiptOverlay" onclick="if(event.target===this)closeReceipt()"><div class="receipt-dialog"><div class="receipt-actions"><b>Order receipt</b><div class="row-actions"><button class="secondary" onclick="window.print()">Print / Save PDF</button><button class="secondary" onclick="closeReceipt()">Close</button></div></div><div class="receipt-paper" id="receiptPaper"></div></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-data.js"></script>
-<script src="preloaded-products.js"></script><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="preloaded-products.js"></script><script>
+function stableProductImageUrl(url){
+  if(!url) return '';
+  const s=String(url);
+  if(s.startsWith('data:') || s.startsWith('blob:') || s.includes('images.weserv.nl')) return s;
+  if(/https?:\/\/tse\d*\.mm\.bing\.net\/th/i.test(s)){
+    return 'https://images.weserv.nl/?url='+encodeURIComponent(s)+'&w=700&h=700&fit=contain&output=webp';
+  }
+  return s;
+}
+function productImgError(img){
+  if(!img) return;
+  const original=img.dataset.originalSrc||'';
+  if(!img.dataset.triedOriginal && original && img.src!==original){
+    img.dataset.triedOriginal='1';
+    img.src=original;
+    return;
+  }
+  img.onerror=null;
+  img.removeAttribute('src');
+  img.style.display='none';
+  const parent=img.parentElement;
+  if(parent && !parent.querySelector('.image-fallback')){
+    const d=document.createElement('div');
+    d.className='image-fallback';
+    d.textContent='🧴';
+    d.style.cssText='display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:30px';
+    parent.appendChild(d);
+  }
+}
+</script><script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 
 const supabaseReady=!!window.nadineSupabase;
@@ -806,7 +836,7 @@ function renderProductsTable(){
     <td><input class="trash-select" type="checkbox" ${productSelected.has(String(p.id))?'checked':''} onchange="toggleProductSelection('${escapeAttr(p.id)}',this.checked)"></td>
     <td><b>${esc(p.name)}</b><div class="muted" style="font-size:12px">${esc([p.meta,p.description].filter(Boolean).join(' · '))}</div></td>
     <td><code>${esc(p.barcode||'—')}</code></td>
-    <td><div class="thumbs">${p.images?.length?p.images.slice(0,3).map(i=>`<img src="${i}">`).join(''):'—'}</div></td>
+    <td><div class="thumbs">${p.images?.length?p.images.slice(0,3).map(i=>`<img src="${stableProductImageUrl(i)}" data-original-src="${i}" referrerpolicy="no-referrer" onerror="productImgError(this)">`).join(''):'—'}</div></td>
     <td><select aria-label="Move product category" onchange="moveProductToCategory('${escapeAttr(p.id)}',this.value)">${normalizeCategories([...defaultCategories,...categories,p.cat||'Wellness']).filter(c=>c!=='para').map(c=>`<option ${c===(p.cat||'Wellness')?'selected':''}>${esc(c)}</option>`).join('')}</select></td><td>${money(p.price)}</td><td>${getProductExpiryValue(p)||'—'}</td>
     <td><span class="status">Available</span></td>
     <td><div class="row-actions"><button class="secondary" onclick="editProduct('${p.id}')">Edit</button><button class="danger" onclick="deleteProduct('${p.id}')">Delete</button></div></td>
@@ -894,7 +924,7 @@ async function purgeAllProductsForever(){
     alert(`Product catalog cleared. ${ids.length} product record(s) were permanently deleted.`);
   }catch(err){console.error('Clear all product data failed',err);alert('Could not clear all product data: '+(err?.message||err));}
 }
-function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>{const img=new Image();img.onerror=reject;img.onload=()=>{const max=700,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',.7))};img.src=reader.result};reader.readAsDataURL(file)})}async function readFiles(files){const selected=[...files].slice(0,3);return Promise.all(selected.map(compressImage))}async function previewSelectedImages(){let imgs=await readFiles($('aImages').files);$('imagePreview').innerHTML=[...editingImages,...imgs].slice(0,3).map(i=>`<img src="${i}">`).join('')}
+function compressImage(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>{const img=new Image();img.onerror=reject;img.onload=()=>{const max=700,scale=Math.min(1,max/Math.max(img.width,img.height)),canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);resolve(canvas.toDataURL('image/jpeg',.7))};img.src=reader.result};reader.readAsDataURL(file)})}async function readFiles(files){const selected=[...files].slice(0,3);return Promise.all(selected.map(compressImage))}async function previewSelectedImages(){let imgs=await readFiles($('aImages').files);$('imagePreview').innerHTML=[...editingImages,...imgs].slice(0,3).map(i=>`<img src="${stableProductImageUrl(i)}" data-original-src="${i}" referrerpolicy="no-referrer" onerror="productImgError(this)">`).join('')}
 async function writeAudit(action,product,before={}){try{await db.collection('auditLogs').add({action,productId:String(product.id||editingId||''),productName:product.name||'',before,after:product,adminEmail:auth.currentUser?.email||'',createdAt:sbFieldValue.serverTimestamp()})}catch(e){console.warn('Audit log unavailable',e)}}
 async function saveProduct(){
   const name=$('aName').value.trim(),barcode=$('aBarcode').value.trim(),cat=$('aCat').value,
@@ -980,7 +1010,7 @@ Cancel = keep it unchanged`);
     $('saveBtn').textContent=editingId?'Save changes':'Add product';
   }
 }
-function editProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;editingId=id;editingImages=[...(p.images||[])];$('aName').value=p.name||'';$('aBarcode').value=p.barcode||'';$('aCat').value=p.cat||'';updateProductSubcategoryField(p.subcategory||p.medicalDeviceSubcategory||'');$('aPrice').value=p.price??'';$('aMeta').value=p.meta||'';$('aDescription').value=p.description||'';$('aExpiry').value=(typeof getProductExpiryValue(p)==='string'?getProductExpiryValue(p):'');$('aPrescription').checked=false;$('imagePreview').innerHTML=editingImages.map(i=>`<img src="${i}">`).join('');$('formTitle').textContent='Edit product';$('saveBtn').textContent='Save changes';showPanel('products');scrollTo({top:0,behavior:'smooth'})}
+function editProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;editingId=id;editingImages=[...(p.images||[])];$('aName').value=p.name||'';$('aBarcode').value=p.barcode||'';$('aCat').value=p.cat||'';updateProductSubcategoryField(p.subcategory||p.medicalDeviceSubcategory||'');$('aPrice').value=p.price??'';$('aMeta').value=p.meta||'';$('aDescription').value=p.description||'';$('aExpiry').value=(typeof getProductExpiryValue(p)==='string'?getProductExpiryValue(p):'');$('aPrescription').checked=false;$('imagePreview').innerHTML=editingImages.map(i=>`<img src="${stableProductImageUrl(i)}" data-original-src="${i}" referrerpolicy="no-referrer" onerror="productImgError(this)">`).join('');$('formTitle').textContent='Edit product';$('saveBtn').textContent='Save changes';showPanel('products');scrollTo({top:0,behavior:'smooth'})}
 async function deleteProduct(id){const p=products.find(x=>String(x.id)===String(id));if(!p)return;if(!confirm(`Move ${p.name} to Trash? You can undo this for 30 seconds or restore it later from Trash.`))return;try{await db.collection('products').doc(String(id)).set({active:false,deletedAt:sbFieldValue.serverTimestamp(),deletedBy:auth.currentUser?.email||''},{merge:true});await writeAudit('Product moved to Trash',p,p);showUndoSnackbar(id,p.name)}catch(err){alert('Could not move product to Trash: '+err.message)}}
 async function removeDuplicateProducts(){
   if(!requireSupabase())return;
