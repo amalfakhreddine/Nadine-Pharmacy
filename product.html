@@ -32,7 +32,18 @@ main{max-width:1180px;margin:0 auto;padding:30px 20px 60px}
 @media(max-width:820px){.product-layout{grid-template-columns:1fr}.detail-card{position:static}.cards{grid-template-columns:repeat(2,1fr)}.trust{grid-template-columns:1fr}.title{font-size:27px}}
 @media(max-width:480px){header{padding:10px 14px}.logo span{display:none}.cards{grid-template-columns:1fr 1fr}.buy{grid-template-columns:1fr}.gallery{min-height:320px}.fake{height:280px}}
 </style>
-<style id="nadine-product-image-polish">.gallery{background:#fff!important;overflow:hidden}.gallery img{width:100%!important;height:100%!important;max-width:520px!important;max-height:520px!important;object-fit:contain!important;object-position:center!important;padding:18px}.mini .pic{background:#fff!important;padding:8px}.mini .pic img{object-fit:contain!important;transform:scale(.9)}@media(max-width:480px){.gallery img{padding:12px;max-height:330px!important}}</style></head>
+<style id="nadine-product-image-polish">.gallery{background:#fff!important;overflow:hidden}.gallery img{width:100%!important;height:100%!important;max-width:520px!important;max-height:520px!important;object-fit:contain!important;object-position:center!important;padding:18px}.mini .pic{background:#fff!important;padding:8px}.mini .pic img{object-fit:contain!important;transform:scale(.9)}@media(max-width:480px){.gallery img{padding:12px;max-height:330px!important}}</style>
+<style id="nadine-image-deep-fix">
+/* Uniform ecommerce image presentation — desktop + mobile */
+.photo{background:#fff!important;aspect-ratio:1/1!important;height:auto!important;padding:14px!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
+.photo img{display:block!important;width:100%!important;height:100%!important;max-width:88%!important;max-height:88%!important;object-fit:contain!important;object-position:center!important;padding:0!important;margin:auto!important;transform:none!important;background:#fff!important}
+.card{background:#fff!important}
+.gallery{background:#fff!important}
+.gallery img,.product-image img,.main-image img{object-fit:contain!important;object-position:center!important;background:#fff!important;padding:14px!important}
+@media(max-width:900px){.photo{padding:10px!important}.photo img{max-width:86%!important;max-height:86%!important}}
+@media(max-width:560px){.photo{padding:8px!important}.photo img{max-width:84%!important;max-height:84%!important}.products{align-items:stretch!important}.card{height:100%!important}}
+</style>
+</head>
 <body>
 <header>
   <a class="logo" href="index.html"><img src="nadine-logo.webp" alt="Nadine Parapharm"><span>Nadine Parapharm</span></a>
@@ -174,8 +185,8 @@ function mergeBundledCatalogData(p){
   if(!cat || /^uncategori[sz]ed$/i.test(cat) || /^needs review$/i.test(cat) || /^para$/i.test(cat)) merged.cat=smartCategoryFromName(merged.name,bundled.cat||merged.cat);
   else merged.cat=smartCategoryFromName(merged.name,merged.cat);
   const imgs=Array.isArray(merged.images)?merged.images.filter(Boolean):[];
-  const badImages=!imgs.length || imgs.every(u=>/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u||'')));
-  if(badImages && Array.isArray(bundled.images) && bundled.images.length) merged.images=[...bundled.images];
+  const shouldUseBundledImage=Array.isArray(bundled.images) && bundled.images.length;
+  if(shouldUseBundledImage) merged.images=[...bundled.images];
   if(!String(merged.description||'').trim() && String(bundled.description||'').trim()) merged.description=bundled.description;
   return merged;
 }
