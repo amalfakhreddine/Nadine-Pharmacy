@@ -595,8 +595,8 @@ function openAdminApp(user){
     products=window.NADINE_PRELOADED_PRODUCTS.map(p=>({...p}));
     renderAll();
   }
-  runOneTimeCatalogReset()
-    .catch(err=>alert('Could not clear the old product catalog: '+(err?.message||err)))
+  ensureBundledCatalogSeeded()
+    .catch(err=>console.error('Could not seed bundled catalog',err))
     .finally(()=>{if(typeof startCatalogListeners==='function')startCatalogListeners();});
   if(typeof startReviewsListener==='function')startReviewsListener();
   renderAll();
@@ -698,21 +698,21 @@ async function ensureBundledCatalogSeeded(){
   const marker=await markerRef.get();
   if(marker.exists&&marker.data()?.bundledCatalogSeedVersion===version)return;
 
-  // Never overwrite an existing catalog automatically. This seed is only for a
-  // fresh/empty site, which makes the ZIP safe to deploy over an existing store.
+  // Make the database catalog match this spreadsheet build exactly.
   const {data:existing,error:existingError}=await window.nadineSupabase
-    .from('app_documents').select('doc_id').eq('collection_name','products').limit(1);
+    .from('app_documents').select('doc_id').eq('collection_name','products').range(0,9999);
   if(existingError)throw existingError;
-  if(existing&&existing.length){
-    await markerRef.set({bundledCatalogSeedVersion:'existing-catalog-preserved',bundledCatalogSeedCheckedAt:sbFieldValue.serverTimestamp()},{merge:true});
-    return;
+  const keep=new Set(bundled.map(p=>String(p.id)));
+  const remove=(existing||[]).map(x=>String(x.doc_id)).filter(id=>!keep.has(id));
+  if(remove.length){
+    if(typeof db.bulkDelete==='function')await db.bulkDelete('products',remove,500);
+    else for(let i=0;i<remove.length;i+=100)await Promise.all(remove.slice(i,i+100).map(id=>db.collection('products').doc(id).delete()));
   }
 
   const docs=bundled.map(p=>({id:String(p.id),data:{...p,preloaded:true,active:true}}));
-  if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,400);
-  else{
-    for(let i=0;i<docs.length;i+=100)await Promise.all(docs.slice(i,i+100).map(x=>db.collection('products').doc(x.id).set(x.data)));
-  }
+  if(typeof db.bulkUpsert==='function')await db.bulkUpsert('products',docs,300);
+  else for(let i=0;i<docs.length;i+=100)await Promise.all(docs.slice(i,i+100).map(x=>db.collection('products').doc(x.id).set(x.data)));
+
   const cats=[...new Set(bundled.map(p=>p.cat).filter(Boolean))];
   await markerRef.set({
     bundledCatalogSeedVersion:version,
