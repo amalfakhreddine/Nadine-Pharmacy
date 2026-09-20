@@ -551,6 +551,33 @@ function startReviewsListener(){
   );
 }
 
+
+async function runOneTimeCatalogReset(){
+  const resetVersion='catalog-empty-2026-09-20-v1';
+  const markerRef=db.collection('settings').doc('catalog');
+  try{
+    const marker=await markerRef.get();
+    if(marker.exists && marker.data()?.catalogResetVersion===resetVersion)return;
+    const snap=await db.collection('products').get();
+    const ids=snap.docs.map(d=>String(d.id)).filter(Boolean);
+    if(ids.length){
+      if(typeof db.bulkDelete==='function')await db.bulkDelete('products',ids,800);
+      else for(let i=0;i<ids.length;i+=100)await Promise.all(ids.slice(i,i+100).map(id=>db.collection('products').doc(id).delete()));
+    }
+    await markerRef.set({
+      catalogResetVersion:resetVersion,
+      catalogResetAt:sbFieldValue.serverTimestamp(),
+      catalogResetCount:ids.length,
+      categories:[],
+      deletedCategories:[]
+    },{merge:true});
+    products=[];trashProducts=[];categories=[];deletedCategories=[];
+  }catch(err){
+    console.error('One-time catalog reset failed',err);
+    throw err;
+  }
+}
+
 function openAdminApp(user){
   const activeUser=user||auth?.currentUser;
   if(!activeUser){
@@ -568,8 +595,8 @@ function openAdminApp(user){
     products=window.NADINE_PRELOADED_PRODUCTS.map(p=>({...p}));
     renderAll();
   }
-  ensureBundledCatalogSeeded()
-    .catch(err=>console.error('Preloaded catalog seed failed',err))
+  runOneTimeCatalogReset()
+    .catch(err=>alert('Could not clear the old product catalog: '+(err?.message||err)))
     .finally(()=>{if(typeof startCatalogListeners==='function')startCatalogListeners();});
   if(typeof startReviewsListener==='function')startReviewsListener();
   renderAll();
