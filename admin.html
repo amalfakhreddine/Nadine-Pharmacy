@@ -350,7 +350,7 @@ body:has(#shell.show) #login{display:none!important;}
 </main></div></section>
 <div class="undo-snackbar" id="undoSnackbar"><span id="undoMessage">Product moved to Trash.</span><button type="button" onclick="undoLastDelete()">UNDO <span id="undoCountdown">30</span></button></div><div class="order-toast" id="orderToast" role="alert" aria-live="assertive"><div class="order-toast-head"><div><h3>🔔 New order received</h3><p id="orderToastText">A customer placed a new order.</p></div><button class="order-toast-close" onclick="closeOrderToast()" aria-label="Close">×</button></div><div class="order-toast-actions"><button class="save" onclick="openLatestNewOrder()">Open new orders</button><button class="secondary" onclick="closeOrderToast()">Dismiss</button></div></div><div class="receipt-overlay" id="receiptOverlay" onclick="if(event.target===this)closeReceipt()"><div class="receipt-dialog"><div class="receipt-actions"><b>Order receipt</b><div class="row-actions"><button class="secondary" onclick="window.print()">Print / Save PDF</button><button class="secondary" onclick="closeReceipt()">Close</button></div></div><div class="receipt-paper" id="receiptPaper"></div></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-data.js"></script>
-<script src="preloaded-products.js"></script><script src="catalog-recovery.js"></script><script>
+<script src="preloaded-products.js"></script><script>
 function stableProductImageUrl(url){
   if(!url) return '';
   const s=String(url);
@@ -500,7 +500,7 @@ let softpharmExistingByName=new Map();
 let softpharmExistingCount=0;
 
 
-function openCustomerSite(){const url=new URL('index.html',window.location.href);window.open(url.href,'_blank')}const $=id=>document.getElementById(id);const money=window.nadineMoney;
+function openCustomerSite(){const url=new URL('index.html',window.location.href);window.open(url.href,'_blank')}const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
 let adminAppStarted=false;
 const PRIMARY_ADMIN_EMAIL='nadinepharmacy@gmail.com';
 const PRIMARY_ADMIN_UID='976d36d6-6074-4880-9490-20eed1a43289';
@@ -721,7 +721,7 @@ async function persistMissingProductDescriptions(rawProducts){
   try{
     const docs=missing.map(p=>({id:String(p.id),data:{description:bundledDescriptionForAdminProduct(p),updatedAt:new Date().toISOString()}}));
     if(typeof db.bulkUpsert==='function'){
-      for(let i=0;i<docs.length;i+=800)await db.bulkUpsert('products',docs.slice(i,i+800),400,{merge:true});
+      for(let i=0;i<docs.length;i+=800)await db.bulkUpsert('products',docs.slice(i,i+800),400);
     }else{
       for(let i=0;i<docs.length;i+=100)await Promise.all(docs.slice(i,i+100).map(x=>db.collection('products').doc(x.id).set(x.data,{merge:true})));
     }
@@ -748,7 +748,7 @@ async function persistNeedsReviewCategoryRepairs(rawProducts){
   try{
     const docs=broken.map(p=>({id:String(p.id),data:{cat:repairedCategoryForProduct(p),updatedAt:new Date().toISOString()}}));
     if(typeof db.bulkUpsert==='function'){
-      for(let i=0;i<docs.length;i+=800)await db.bulkUpsert('products',docs.slice(i,i+800),400,{merge:true});
+      for(let i=0;i<docs.length;i+=800)await db.bulkUpsert('products',docs.slice(i,i+800),400);
     }else{
       for(let i=0;i<docs.length;i+=100){
         const chunk=docs.slice(i,i+100);
