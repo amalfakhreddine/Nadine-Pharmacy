@@ -185,23 +185,16 @@ function composition(p){return p.genericName||p.activeIngredient||p.meta||''}
 function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
 
 async function getProduct(id){
+  const bundled=(window.NADINE_PRELOADED_PRODUCTS||[]).find(p=>String(p.id)===String(id));
+  if(bundled)return {...bundled};
   const {data,error}=await sb.from('app_documents').select('*').eq('collection_name','products').eq('doc_id',id).maybeSingle();
   if(error)throw error;
   return docProduct(data);
 }
 async function getCandidateProducts(target){
-  const found=[];
-  const pageSize=1000;
-  for(let from=0;from<16000;from+=pageSize){
-    const {data,error}=await sb.from('app_documents').select('*').eq('collection_name','products').range(from,from+pageSize-1);
-    if(error)throw error;
-    const page=(data||[]).map(docProduct).filter(p=>p&&p.active!==false&&String(p.id)!==String(target.id));
-    found.push(...page);
-    if((data||[]).length<pageSize)break;
-    // Stop early when enough good same-category candidates are available.
-    if(found.filter(p=>p.cat===target.cat).length>=24)break;
-  }
-  return found;
+  return (window.NADINE_PRELOADED_PRODUCTS||[])
+    .filter(p=>p&&p.active!==false&&String(p.id)!==String(target.id))
+    .map(p=>({...p}));
 }
 function similarityScore(p,target){
   let score=0;
