@@ -137,12 +137,7 @@ function requireSupabase(){if(!supabaseReady){alert('Supabase is not configured.
 
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
 const defaultCategories=['Skincare','Baby Care','Cosmetics','Hair Care','Personal Care','Oral Care','Vitamins & Supplements','Wellness','Hygiene','Accessories'];function safeRead(key,fallback,allowEmpty=false){try{const raw=localStorage.getItem(key);if(!raw)return structuredClone(fallback);const parsed=JSON.parse(raw);if(!Array.isArray(parsed))return structuredClone(fallback);if(!allowEmpty&&parsed.length===0)return structuredClone(fallback);return parsed}catch(e){return structuredClone(fallback)}}let products=(window.NADINE_PRELOADED_PRODUCTS||[]).map(p=>({...p}));
-const VERIFIED_EXACT_PRODUCT_IMAGES={
-"A DERMA BIOLOGY HYDRATING RICHE CREAM":"https://www.caretobeauty.com/cdn-cgi/image/width=1600,height=1600,f=auto/media/catalog/product/a/-/a-derma-biology-hydrating-rich-cream-40ml.jpg",
-"A-DERMA BIOLOGY AC GEL 200ML":"https://www.caretobeauty.com/cdn-cgi/image/width=1600,height=1600,f=auto/media/catalog/product/a/-/a-derma-biology-ac-purifying-cleansing-foaming-gel-200ml.jpg"
-}
-function applyVerifiedExactImages(list){(list||[]).forEach(p=>{const key=String(p.name||'').trim().toUpperCase();if(VERIFIED_EXACT_PRODUCT_IMAGES[key])p.images=[VERIFIED_EXACT_PRODUCT_IMAGES[key]];else if(Array.isArray(p.images))p.images=p.images.filter(u=>u&&!/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u)));});}
-applyVerifiedExactImages(products);let categories=[];let shopSettings={deliveryFee:3,freeDeliveryThreshold:25,deliveryEnabled:true,pickupEnabled:true};let selectedCat='All',showRxOnly=false,cart=[],customerProfile={},activeCartKey='nadineCart_guest',activeWishlistKey='nadineWishlist_guest',wishlist=[],unsubscribeProducts=null,unsubscribeCatalog=null,unsubscribeShopSettings=null;let recent=safeRead('nadineRecent',[],true);const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
+window.VERIFIED_EXACT_PRODUCT_IMAGES={"A DERMA BIOLOGY HYDRATING RICHE CREAM": "https://media-pierre-fabre.wedia-group.com/api/wedia/dam/transform/u5wa3z31qn5secygymb7nfgmxykqcmm9o3j3m8y/pf_square/u5wa3z31qn5secygymb7nfgmxykqcmm9o3j3m8y?height=800&t=resize&width=800", "A-DERMA BIOLOGY AC GEL 200ML": "https://www.cf.com.lb/cdn/shop/files/04430-01_1.png?v=1765290280&width=1200", "A DERMA EPITHELIAL A.H ULTRA OFFER": "https://media-pierre-fabre.wedia-group.com/api/wedia/dam/transform/u5wa3z31qn5se9qixyx1d1myjmz43diywws4kqe/pf_square/u5wa3z31qn5se9qixyx1d1myjmz43diywws4kqe?height=800&t=resize&width=800"};let selectedCat='All',showRxOnly=false,cart=[],customerProfile={},activeCartKey='nadineCart_guest',activeWishlistKey='nadineWishlist_guest',wishlist=[],unsubscribeProducts=null,unsubscribeCatalog=null,unsubscribeShopSettings=null;let recent=safeRead('nadineRecent',[],true);const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
 function escapeHtml(value){
   return String(value??'').replace(/[&<>"']/g,ch=>({
     '&':'&amp;',
@@ -244,7 +239,7 @@ function customerProductCard(p){
   return `<article class="card">
     <div class="photo" onclick="showProduct('${p.id}')" style="cursor:pointer">
       <span class="badge">${available?'IN STOCK':'SOLD OUT'}</span>
-      ${Array.isArray(p.images)&&p.images[0]?`<img src="${stableProductImageUrl(p.images[0])}" data-original-src="${p.images[0]}" referrerpolicy="no-referrer" onerror="productImgError(this)" alt="${escapeHtml(p.name)}">`:`<div class="fakepack"><span>Product photo being verified</span></div>`}
+      ${Array.isArray(p.images)&&p.images[0]?`<img src="${stableProductImageUrl(p.images[0])}" data-original-src="${p.images[0]}" referrerpolicy="no-referrer" onerror="productImgError(this)" alt="${escapeHtml(p.name)}">`:`<div class="fakepack"><span>Photo loading…</span></div>`}
       <button class="heart ${wishlist.includes(String(p.id))?'saved':''}" aria-label="Save product" onclick="event.stopPropagation();toggleWishlist('${p.id}')">${wishlist.includes(String(p.id))?'♥':'♡'}</button>
     </div>
     <div class="info">
@@ -738,6 +733,70 @@ else{loadCartForUser(null);loadWishlistForUser(null);}
 renderCats();renderProducts();renderRecent();updateCartCount();updateWishlistCount();
 if(!supabaseReady)updateAuthButton();
 </script>
+
+<script id="nadine-exact-photo-resolver">
+(function(){
+  const CACHE_KEY='nadine_exact_product_photos_v4';
+  let cache={}; try{cache=JSON.parse(localStorage.getItem(CACHE_KEY)||'{}')||{}}catch(e){}
+  const stop=new Set(['A','AN','THE','AND','OR','WITH','FOR','OF','IN','ON','FREE','OFFER','PACK','PCS','PC']);
+  const norm=x=>String(x||'').toUpperCase().replace(/A[ -]?DERMA/g,'ADERMA').replace(/WIPS/g,'WIPES').replace(/[^A-Z0-9]+/g,' ').trim();
+  const toks=x=>norm(x).split(/\s+/).filter(t=>t.length>1&&!stop.has(t));
+  function score(a,b){
+    const A=toks(a),B=new Set(toks(b)); if(!A.length)return 0;
+    let hit=0, important=0, importantHit=0;
+    for(const t of A){ if(B.has(t))hit++; if(/[0-9]/.test(t)||t.length>=5){important++;if(B.has(t))importantHit++;} }
+    let sc=hit/A.length; if(important) sc=.65*sc+.35*(importantHit/important);
+    if(norm(a)===norm(b)) sc=1; return sc;
+  }
+  function cleanUrl(u){return String(u||'').replace(/&width=\d+/,'&width=900');}
+  async function resolveOne(p){
+    const key=norm(p.name); if(!key)return null;
+    if(window.VERIFIED_EXACT_PRODUCT_IMAGES?.[key]) return window.VERIFIED_EXACT_PRODUCT_IMAGES[key];
+    if(cache[key]) return cache[key];
+    const q=encodeURIComponent(String(p.name||'').replace(/\+/g,' '));
+    const urls=[
+      `https://www.cf.com.lb/search/suggest.json?q=${q}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=last`,
+      `https://cf.com.lb/search/suggest.json?q=${q}&resources[type]=product&resources[limit]=6&resources[options][unavailable_products]=last`
+    ];
+    for(const url of urls){
+      try{
+        const r=await fetch(url,{mode:'cors',credentials:'omit'}); if(!r.ok)continue;
+        const j=await r.json(); const arr=j?.resources?.results?.products||[];
+        let best=null,bestScore=0;
+        for(const x of arr){
+          const sc=score(p.name,x.title); if(sc>bestScore){bestScore=sc;best=x;}
+        }
+        // High threshold prevents unrelated photos. Exact source catalog often scores 0.8-1.0.
+        if(best && bestScore>=0.72 && best.image){
+          const img=cleanUrl(best.image); cache[key]=img;
+          try{localStorage.setItem(CACHE_KEY,JSON.stringify(cache))}catch(e){}
+          return img;
+        }
+      }catch(e){}
+    }
+    return null;
+  }
+  async function hydrate(){
+    if(!Array.isArray(window.products)&&typeof products==='undefined')return;
+    const list=(typeof products!=='undefined'?products:window.products)||[];
+    // apply verified/cache immediately
+    let changed=false;
+    for(const p of list){const k=norm(p.name);const u=(window.VERIFIED_EXACT_PRODUCT_IMAGES||{})[k]||cache[k];if(u&&(!p.images||!p.images[0])){p.images=[u];changed=true;}}
+    if(changed&&typeof render==='function')render();
+    const todo=list.filter(p=>!p.images?.[0]);
+    let cursor=0;
+    async function worker(){
+      while(cursor<todo.length){const p=todo[cursor++];const u=await resolveOne(p);if(u){p.images=[u]; if(cursor%8===0&&typeof render==='function')render();}}
+    }
+    await Promise.all(Array.from({length:4},worker));
+    if(typeof render==='function')render();
+  }
+  window.nadineResolveExactPhotos=hydrate;
+  window.addEventListener('load',()=>setTimeout(hydrate,700));
+  setTimeout(hydrate,1800);
+})();
+</script>
+
 </body></html>
 <style id="nadine-product-image-final-normalization">
 .photo{height:auto!important;aspect-ratio:1/1!important;background:#fff!important;padding:22px!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
