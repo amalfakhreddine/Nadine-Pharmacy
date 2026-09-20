@@ -1,12 +1,1 @@
-{
-  "name": "nadine-pharmacy",
-  "private": true,
-  "version": "2.0.0",
-  "engines": {
-    "node": "22.x"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
-    "nodemailer": "^7.0.5"
-  }
-}
+{"type":"module"}
