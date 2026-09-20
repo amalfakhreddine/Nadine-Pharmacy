@@ -84,7 +84,7 @@ main{max-width:1180px;margin:0 auto;padding:30px 20px 60px}
 </main>
 <div class="toast" id="toast">Added to cart</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="preloaded-products.js"></script>
+<script src="preloaded-products.js"></script><script src="catalog-recovery.js"></script>
 <script>
 function stableProductImageUrl(url){
   if(!url) return '';
@@ -118,7 +118,7 @@ function productImgError(img){
 
 const sb=supabase.createClient('https://umaotmgjvzkvsvnsavdu.supabase.co','sb_publishable_n7qbS_7kArsjDDilGkSvqQ_zl40jlkd');
 const $=id=>document.getElementById(id);
-const money=n=>'$'+Number(n||0).toFixed(2);
+const money=window.nadineMoney;
 const esc=s=>String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const productId=new URLSearchParams(location.search).get('id');
@@ -167,6 +167,7 @@ function smartCategoryFromName(name,currentCat=''){
 
 function mergeBundledCatalogData(p){
   if(!p)return p;
+  p=window.nadineRecoverProduct(p);
   const bundled=bundledProductFor(p);
   if(!bundled)return p;
   const merged={...p};
@@ -180,7 +181,7 @@ function mergeBundledCatalogData(p){
   return merged;
 }
 function docProduct(row){return row?mergeBundledCatalogData({id:row.doc_id,...(row.data||{})}):null}
-function inStock(p){return p&&(p.stockUnlimited===true||p.stock==null||p.stock===''||Number(p.stock)>0)}
+function inStock(p){return p&&window.nadinePrice(p.price)!==null&&(p.stockUnlimited===true||p.stock==null||p.stock===''||Number(p.stock)>0)}
 function composition(p){return p.genericName||p.activeIngredient||p.meta||''}
 function showToast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
 

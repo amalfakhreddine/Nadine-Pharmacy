@@ -16,7 +16,12 @@
   };
   class SnapDoc{
     constructor(row){this._row=row;this.id=row?.doc_id||'';this.exists=!!row}
-    data(){return this._row?this._row.data:null}
+    data(){
+      if(!this._row)return null;
+      const data=this._row.data;
+      return this._row.collection_name==='products' && window.nadineRecoverProduct
+        ? window.nadineRecoverProduct({...data,id:this.id}) : data;
+    }
   }
   class SnapQuery{
     constructor(rows){this.docs=(rows||[]).map(r=>new SnapDoc(r));this.size=this.docs.length;this.empty=!this.docs.length}
@@ -135,10 +140,22 @@
         if(error)throw error;
       }
     },
-    bulkUpsert:async(col,docs,chunkSize=400)=>{
+    bulkUpsert:async(col,docs,chunkSize=400,options={})=>{
       const rows=(docs||[]).map(x=>({collection_name:col,doc_id:String(x.id),data:clean(x.data),updated_at:new Date().toISOString()}));
       for(let i=0;i<rows.length;i+=chunkSize){
-        const {error}=await sb.from('app_documents').upsert(rows.slice(i,i+chunkSize),{onConflict:'collection_name,doc_id'});
+        const chunk=rows.slice(i,i+chunkSize);
+        if(options.merge){
+          const {data:existing,error:readError}=await sb.from('app_documents').select('*').eq('collection_name',col).in('doc_id',chunk.map(r=>r.doc_id));
+          if(readError)throw readError;
+          const previous=new Map((existing||[]).map(r=>[r.doc_id,r.data]));
+          for(const row of chunk){
+            if(!previous.has(row.doc_id))throw new Error('Product no longer exists: '+row.doc_id);
+            let old=previous.get(row.doc_id);
+            if(col==='products'&&window.nadineRecoverProduct)old=window.nadineRecoverProduct({...old,id:row.doc_id});
+            row.data={...old,...row.data};
+          }
+        }
+        const {error}=await sb.from('app_documents').upsert(chunk,{onConflict:'collection_name,doc_id'});
         if(error)throw error;
       }
     },
