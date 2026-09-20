@@ -354,17 +354,10 @@ init();
 </script>
 
 <script>
-const VERIFIED_EXACT_PRODUCT_IMAGES = {
-  "A DERMA EPITHELIAL A.H ULTRA OFFER": "https://cdn.redcare-pharmacie.fr/images/F00/282/969/F00282969-p10.jpg",
-  "A-DERMA BIOLOGY AC GEL 200ML": "https://dermamedina.com/cdn/shop/files/3282770152999_Aderma_Biology_AC_Gel_Espumoso_Para_Piel_Grasa_200ml.jpg?v=1752517611&width=800"
-};
-const VERIFIED_EXACT_PRODUCT_IMAGES=window.VERIFIED_EXACT_PRODUCT_IMAGES||{};
+const VERIFIED_PRODUCT_IMAGES=window.VERIFIED_EXACT_PRODUCT_IMAGES||{};
 function applyVerifiedExactImages(list){
-  (list||[]).forEach(p=>{
-    const key=String(p.name||'').trim().toUpperCase();
-    if(VERIFIED_EXACT_PRODUCT_IMAGES[key]) p.images=[VERIFIED_EXACT_PRODUCT_IMAGES[key]];
-    else if(Array.isArray(p.images)) p.images=p.images.filter(u=>u && !/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u)));
-  });
+ const norm=x=>String(x||'').toUpperCase().replace(/A[ -]?DERMA/g,'ADERMA').replace(/WIPS/g,'WIPES').replace(/[^A-Z0-9]+/g,' ').trim();
+ (list||[]).forEach(p=>{const u=VERIFIED_PRODUCT_IMAGES[norm(p.name)];if(u)p.images=[u];else if(Array.isArray(p.images))p.images=p.images.filter(u=>u&&!/tse\d*\.mm\.bing\.net|images\.weserv\.nl/i.test(String(u)));});
 }
 </script>
 </body>

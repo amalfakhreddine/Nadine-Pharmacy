@@ -143,7 +143,15 @@ function requireSupabase(){if(!supabaseReady){alert('Supabase is not configured.
 const defaults=[{id:1,name:'Panadol Extra',cat:'Medicines',price:4.5,stock:18,meta:'500mg · 24 tablets',expiry:'2027-06-30',images:[]},{id:2,name:'CeraVe Moisturising Cream',cat:'Skincare',price:15.9,stock:9,meta:'340g',expiry:'2028-04-30',images:[]},{id:3,name:'Vitamin D3',cat:'Vitamins',price:8.9,stock:8,meta:'1000 IU · 60 softgels',expiry:'2027-11-30',images:[]},{id:4,name:'Omega-3 Fish Oil',cat:'Supplements',price:12.5,stock:14,meta:'1000mg · 60 softgels',expiry:'2027-09-30',images:[]},{id:5,name:'Magnesium Citrate',cat:'Supplements',price:10.9,stock:10,meta:'200mg · 60 tablets',expiry:'2027-08-31',images:[]},{id:6,name:'Collagen Peptides',cat:'Supplements',price:22,stock:7,meta:'300g powder',expiry:'2027-05-31',images:[]},{id:7,name:'Bepanthen Ointment',cat:'Baby Care',price:6.2,stock:12,meta:'100g',expiry:'2028-02-28',images:[]},{id:8,name:'Digital Thermometer',cat:'Medical Devices',price:7,stock:11,meta:'Fast reading',expiry:'',images:[]}];
 const defaultCategories=['Skincare','Baby Care','Cosmetics','Hair Care','Personal Care','Oral Care','Vitamins & Supplements','Wellness','Hygiene','Accessories'];function safeRead(key,fallback,allowEmpty=false){try{const raw=localStorage.getItem(key);if(!raw)return structuredClone(fallback);const parsed=JSON.parse(raw);if(!Array.isArray(parsed))return structuredClone(fallback);if(!allowEmpty&&parsed.length===0)return structuredClone(fallback);return parsed}catch(e){return structuredClone(fallback)}}let products=(Array.isArray(window.NADINE_PRELOADED_PRODUCTS)?window.NADINE_PRELOADED_PRODUCTS:[]).map(p=>({...p}));
 window.products=products;
-window.VERIFIED_EXACT_PRODUCT_IMAGES={"A DERMA BIOLOGY HYDRATING RICHE CREAM": "https://media-pierre-fabre.wedia-group.com/api/wedia/dam/transform/u5wa3z31qn5secygymb7nfgmxykqcmm9o3j3m8y/pf_square/u5wa3z31qn5secygymb7nfgmxykqcmm9o3j3m8y?height=800&t=resize&width=800", "A-DERMA BIOLOGY AC GEL 200ML": "https://www.cf.com.lb/cdn/shop/files/04430-01_1.png?v=1765290280&width=1200", "A DERMA EPITHELIAL A.H ULTRA OFFER": "https://media-pierre-fabre.wedia-group.com/api/wedia/dam/transform/u5wa3z31qn5se9qixyx1d1myjmz43diywws4kqe/pf_square/u5wa3z31qn5se9qixyx1d1myjmz43diywws4kqe?height=800&t=resize&width=800"};let selectedCat='All',showRxOnly=false,cart=[],customerProfile={},activeCartKey='nadineCart_guest',activeWishlistKey='nadineWishlist_guest',wishlist=[],unsubscribeProducts=null,unsubscribeCatalog=null,unsubscribeShopSettings=null;let recent=safeRead('nadineRecent',[],true);const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
+window.VERIFIED_EXACT_PRODUCT_IMAGES={
+"2 INTIMATE WASH + WIPES FREE":"https://superdokan.com/cdn/shop/files/Screenshot_20250620_120249.jpg?v=1750410928",
+"ADERMA BIOLOGY HYDRATING RICHE CREAM":"https://wecare-lb.com/cdn/shop/files/5.webp?v=1711191574&width=1946",
+"ADERMA EPITHELIAL A H ULTRA OFFER":"https://cdn.redcare-pharmacie.fr/images/F00/282/969/F00282969-p10.jpg",
+"ADERMA BIOLOGY AC GEL 200ML":"https://www.boticinal.com/media/catalog/product/a/-/a-derma-biology-ac-gel-moussant-nettoyant-purifiant-bio-visage-buste-et-dos-peaux-grasses-a-tendance-acneique-200ml-boticinal.jpg",
+"ACCU CHEK GUIDE STRIPS":"https://www.accu-chek.co.uk/sites/g/files/papvje266/files/styles/image_400x400/public/2024-01/accu-chek-guide-test-strips-400x400.png?itok=wEl9---C",
+"ACCU CHEK PERFORMA STRIP 50":"https://www.accu-chek.co.uk/sites/g/files/papvje266/files/styles/image_400x400/public/2024-01/accu-chek-performa-test-strips-400x400.png?itok=mZgiSqf8",
+"ACCU CHECK INSTANT STRIPS":"https://www.accu-chek.co.uk/sites/g/files/papvje266/files/styles/image_400x400/public/2023-11/accu-chek-instant-test-strips-400x400v2.png?itok=6WJKBcNY"
+};let selectedCat='All',showRxOnly=false,cart=[],customerProfile={},activeCartKey='nadineCart_guest',activeWishlistKey='nadineWishlist_guest',wishlist=[],unsubscribeProducts=null,unsubscribeCatalog=null,unsubscribeShopSettings=null;let recent=safeRead('nadineRecent',[],true);const $=id=>document.getElementById(id);const money=n=>'$'+Number(n).toFixed(2);
 function escapeHtml(value){
   return String(value??'').replace(/[&<>"']/g,ch=>({
     '&':'&amp;',
@@ -245,7 +253,7 @@ function customerProductCard(p){
   return `<article class="card" data-id="${escapeHtml(p.id)}">
     <div class="photo" onclick="showProduct('${p.id}')" style="cursor:pointer">
       <span class="badge">${available?'IN STOCK':'SOLD OUT'}</span>
-      ${Array.isArray(p.images)&&p.images[0]?`<img src="${stableProductImageUrl(p.images[0])}" data-original-src="${p.images[0]}" referrerpolicy="no-referrer" onerror="productImgError(this)" alt="${escapeHtml(p.name)}">`:`<div class="fakepack"><span>${p._photoChecked?"Photo unavailable":"Photo loading…"}</span></div>`}
+      ${Array.isArray(p.images)&&p.images[0]?`<img src="${stableProductImageUrl(p.images[0])}" data-original-src="${p.images[0]}" referrerpolicy="no-referrer" onerror="productImgError(this)" alt="${escapeHtml(p.name)}">`:`<div class="fakepack"><span>${"Photo unavailable"}</span></div>`}
       <button class="heart ${wishlist.includes(String(p.id))?'saved':''}" aria-label="Save product" onclick="event.stopPropagation();toggleWishlist('${p.id}')">${wishlist.includes(String(p.id))?'♥':'♡'}</button>
     </div>
     <div class="info">
@@ -751,27 +759,16 @@ if(!supabaseReady)updateAuthButton();
   window.addEventListener('DOMContentLoaded',recover); window.addEventListener('load',recover); setTimeout(recover,300); setTimeout(recover,1500);
 })();
 </script>
-<script id="nadine-exact-photo-resolver">
+<script id="nadine-static-verified-photos">
 (function(){
-  const CACHE_KEY='nadine_exact_product_photos_source_v1';
-  let cache={};try{cache=JSON.parse(localStorage.getItem(CACHE_KEY)||'{}')||{}}catch(e){}
-  const norm=x=>String(x||'').toUpperCase().replace(/A[ -]?DERMA/g,'ADERMA').replace(/WIPS/g,'WIPES').replace(/[^A-Z0-9]+/g,' ').trim();
-  async function resolveOne(p){
-    const key=norm(p.name);if(!key)return null;
-    if(window.VERIFIED_EXACT_PRODUCT_IMAGES?.[key])return window.VERIFIED_EXACT_PRODUCT_IMAGES[key];
-    if(cache[key])return cache[key];
-    try{const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);const r=await fetch('/api/product-image?q='+encodeURIComponent(p.name),{signal:c.signal,credentials:'omit'});clearTimeout(t);if(!r.ok)return null;const j=await r.json();if(j?.ok&&j.image&&Number(j.score||0)>=.82){cache[key]=j.image;try{localStorage.setItem(CACHE_KEY,JSON.stringify(cache))}catch(e){}return j.image}}catch(e){}return null;
-  }
-  let queue=[],running=0;const queued=new Set();
-  function pump(){while(running<4&&queue.length){const p=queue.shift(),k=norm(p.name);running++;resolveOne(p).then(u=>{p._photoChecked=true;if(u){p.images=[u];if(typeof renderProducts==='function')renderProducts();}}).finally(()=>{queued.delete(k);running--;pump()});}}
-  function enqueue(p){const k=norm(p.name);if(!k||p.images?.[0]||queued.has(k))return;queued.add(k);queue.push(p);pump();}
-  function hydrateVisible(){const list=(typeof products!=='undefined'?products:window.products)||[];for(const p of list){const k=norm(p.name),u=(window.VERIFIED_EXACT_PRODUCT_IMAGES||{})[k]||cache[k];if(u&&!p.images?.[0])p.images=[u];}
-    if(typeof renderProducts==='function')renderProducts();
-    const cards=[...document.querySelectorAll('.card[data-id]')];
-    if(!('IntersectionObserver'in window)){list.slice(0,48).forEach(enqueue);return;}
-    const byId=new Map(list.map(p=>[String(p.id),p]));const io=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting){const p=byId.get(String(e.target.dataset.id));if(p)enqueue(p);io.unobserve(e.target)}},{rootMargin:'900px'});cards.forEach(c=>io.observe(c));
-  }
-  window.nadineResolveExactPhotos=hydrateVisible;window.addEventListener('load',()=>setTimeout(hydrateVisible,300));
+ const norm=x=>String(x||'').toUpperCase().replace(/A[ -]?DERMA/g,'ADERMA').replace(/WIPS/g,'WIPES').replace(/[^A-Z0-9]+/g,' ').trim();
+ function apply(){
+   const list=(typeof products!=='undefined'?products:window.products)||[];
+   let changed=false;
+   for(const p of list){const u=(window.VERIFIED_EXACT_PRODUCT_IMAGES||{})[norm(p.name)];if(u&&(!p.images||p.images[0]!==u)){p.images=[u];p._photoChecked=true;changed=true;}}
+   if(changed&&typeof renderProducts==='function')renderProducts();
+ }
+ window.addEventListener('DOMContentLoaded',apply);window.addEventListener('load',apply);setTimeout(apply,50);setTimeout(apply,500);
 })();
 </script>
 
