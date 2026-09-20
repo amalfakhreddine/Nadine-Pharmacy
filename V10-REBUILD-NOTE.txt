@@ -1,0 +1,14 @@
+Nadine Parapharmacy v10 clean catalog rebuild
+
+Source: xxxx(1).xlsx
+Products: 2236
+Catalog version: sheet-rebuild-direct-browser-images-2026-09-20-v10
+
+What changed:
+- Spreadsheet catalog is the source of truth.
+- Admin seed version changed, so signing in once re-syncs the database to this catalog and removes product records not in this spreadsheet build.
+- Product cards no longer depend on /api/product-photo scraping.
+- Each product has direct browser-image thumbnail URLs generated from its exact spreadsheet product name + "product packshot".
+- Bing thumbnails are loaded directly (no images.weserv.nl proxy).
+
+Note: image search results can still occasionally be imperfect for ambiguous product names; admin photo upload remains available for manual overrides.

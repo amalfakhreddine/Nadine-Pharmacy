@@ -553,7 +553,7 @@ function startReviewsListener(){
 
 
 async function runOneTimeCatalogReset(){
-  const resetVersion='catalog-empty-2026-09-20-v1';
+  const resetVersion='catalog-rebuild-2026-09-20-v10';
   const markerRef=db.collection('settings').doc('catalog');
   try{
     const marker=await markerRef.get();
