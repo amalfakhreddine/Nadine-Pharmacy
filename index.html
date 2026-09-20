@@ -240,6 +240,21 @@ function searchScore(p,q){
   }
   return score;
 }
+const nadinePhotoLookupInFlight=new Set();
+async function nadineFindMissingPhoto(p){
+  if(!p || (Array.isArray(p.images)&&p.images[0]) || p._photoChecked || nadinePhotoLookupInFlight.has(String(p.id))) return;
+  nadinePhotoLookupInFlight.add(String(p.id));
+  try{
+    const q=encodeURIComponent(p.imageSearchName||p.name||'');
+    const r=await fetch('/api/product-image?q='+q,{headers:{'accept':'application/json'}});
+    const j=await r.json();
+    if(j&&j.ok&&j.image){p.images=[j.image];p._photoChecked=true; if(typeof renderProducts==='function') renderProducts();}
+    else p._photoChecked=true;
+  }catch(e){} finally{nadinePhotoLookupInFlight.delete(String(p.id));}
+}
+function nadineQueueVisibleMissingPhotos(list){
+  (list||[]).filter(p=>!(Array.isArray(p.images)&&p.images[0])&&!p._photoChecked).slice(0,12).forEach((p,i)=>setTimeout(()=>nadineFindMissingPhoto(p),i*120));
+}
 function customerProductCard(p){
   const available=isInStock(p);
   return `<article class="card" data-id="${escapeHtml(p.id)}">
@@ -297,6 +312,7 @@ function renderProducts(){
   if(customerProductPage>totalPages)customerProductPage=totalPages;
   const start=(customerProductPage-1)*CUSTOMER_PAGE_SIZE;
   const visible=arr.slice(start,start+CUSTOMER_PAGE_SIZE);
+  nadineQueueVisibleMissingPhotos(visible);
 
   const head=document.querySelector('#shop .section-head h2');
   const sub=document.querySelector('#shop .section-head div div');
