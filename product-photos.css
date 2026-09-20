@@ -1,0 +1,48 @@
+/* One square photo stage at every viewport, with space around the full pack. */
+.card .photo, .mini .pic, .product-layout .gallery {
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  background: #fff;
+  overflow: hidden;
+  isolation: isolate;
+}
+.card .photo > img, .mini .pic > img, .product-layout .gallery > img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  padding: 12%;
+  object-fit: contain;
+  object-position: center;
+}
+.card .photo .badge, .card .photo .heart { z-index: 2; }
+.card .photo .badge { top: 10px; left: 10px; }
+.card .photo .heart { right: 10px; bottom: 10px; }
+.card .photo .fakepack, .product-layout .gallery .fake {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 18%;
+  background: #fff;
+  color: #6d7f76;
+  box-shadow: none;
+  border-radius: 0;
+  font-size: 14px;
+  text-align: center;
+}
+.card .info h3 { line-height: 1.4; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .card .photo > img { padding: 14%; }
+  .card .photo .badge { font-size: 10px; padding: 5px 8px; }
+  .card .photo .heart { width: 34px; height: 34px; }
+}
