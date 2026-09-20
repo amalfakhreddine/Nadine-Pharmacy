@@ -246,14 +246,14 @@ async function nadineFindMissingPhoto(p){
   nadinePhotoLookupInFlight.add(String(p.id));
   try{
     const q=encodeURIComponent(p.imageSearchName||p.name||'');
-    const r=await fetch('/api/product-image?q='+q+'&v=4',{headers:{'accept':'application/json'},cache:'no-store'});
+    const r=await fetch('/api/product-image?q='+q+'&v=5',{headers:{'accept':'application/json'},cache:'no-store'});
     const j=await r.json();
     if(j&&j.ok&&j.image){p.images=[j.image];p._photoChecked=true; if(typeof renderProducts==='function') renderProducts();}
-    else p._photoChecked=true;
+    else { p._photoAttempts=(p._photoAttempts||0)+1; if(p._photoAttempts>=3)p._photoChecked=true; }
   }catch(e){} finally{nadinePhotoLookupInFlight.delete(String(p.id));}
 }
 function nadineQueueVisibleMissingPhotos(list){
-  (list||[]).filter(p=>!(Array.isArray(p.images)&&p.images[0])&&!p._photoChecked).slice(0,12).forEach((p,i)=>setTimeout(()=>nadineFindMissingPhoto(p),i*120));
+  (list||[]).filter(p=>!(Array.isArray(p.images)&&p.images[0])&&!p._photoChecked).slice(0,24).forEach((p,i)=>setTimeout(()=>nadineFindMissingPhoto(p),i*180));
 }
 function customerProductCard(p){
   const available=isInStock(p);
